@@ -3,13 +3,15 @@
 #include <set>
 #include <map>
 #include <string>
-#include <utility>
 #include <vector>
 #include <cmath>
+#include <numeric>
+#include <tuple>
 
 using namespace std;
 
 const int MAX_RESULT_DOCUMENT_COUNT = 5;
+const int PRECISE = 1e-06;
 
 string ReadLine() {
     string s;
@@ -45,12 +47,32 @@ vector<string> SplitIntoWords(const string& text) {
     return words;
 }
 
+
+
 struct Document {
     int id;
     double relevance;
+    int rating;
 };
 
+
+enum class DocumentStatus {
+        ACTUAL,
+        IRRELEVANT,
+        BANNED,
+        REMOVED,
+    };
+
+void PrintDocument(const Document& document) {
+    cout << "{ "s
+         << "document_id = "s << document.id << ", "s
+         << "relevance = "s << document.relevance << ", "s
+         << "rating = "s << document.rating
+         << " }"s << endl;
+}
+
 class SearchServer {
+
 public:
     void SetStopWords(const string& text) {
 
@@ -59,34 +81,91 @@ public:
         }
     }
 
-    void AddDocument(int document_id, const string& document) {
+    void AddDocument(int document_id, const string& document, const DocumentStatus& status, const vector<int> ratings) {
 
         // наполняем счетчик документов -- он пригодится для подсчета IDF.
         ++document_count_;
 
+        document_status_[document_id] = status;
+
         const vector<string> words = SplitIntoWordsNoStop(document);
 
-        // Рассчитываем TF каждого слова в каждом документе.
+        documents_rating_[document_id] = ComputeAverageRating(ratings);
+
+        
         for (const string& word : words) {
-            TF_[word][document_id] += 1.0 / words.size();
-            index_[word].insert(document_id);
+            TF_[word][document_id] += 1.0 / words.size(); // Рассчитываем TF каждого слова в каждом документе.
+            index_[word].insert(document_id); // заодно создаем индекс, где по слову можно будет узнать, в каких документах слово есть.
         }
     }
 
-    vector<Document> FindTopDocuments(const string& raw_query) const {
+    // перегрузка FindTopDocuments для передачи в качестве вторго параметра функционального объекта
+    template <typename T>
+    vector<Document> FindTopDocuments(const string& raw_query, T filter) const {
 
         const PlusMinusWords query_words = ParseQuery(raw_query);
 
-        auto matched_documents = FindAllDocuments(query_words);
+        auto matched_documents = FindAllDocuments(query_words, filter);
 
         sort(matched_documents.begin(), matched_documents.end(),
              [](const Document& lhs, const Document& rhs) {
-                 return lhs.relevance > rhs.relevance;
+                if (abs(lhs.relevance - rhs.relevance) > PRECISE) {
+                    return lhs.relevance > rhs.relevance;
+                }
+                return lhs.rating > rhs.rating;
              });
         if (matched_documents.size() > MAX_RESULT_DOCUMENT_COUNT) {
             matched_documents.resize(MAX_RESULT_DOCUMENT_COUNT);
         }
         return matched_documents;
+    }
+
+    // перегрузка FindTopDocuments для одиноко переданного запроса (тогда будут выдаваться актуальные по статусу документы)
+    vector<Document> FindTopDocuments(const string& raw_query) const {
+        vector<Document> complete_search = FindTopDocuments(raw_query, [](int document_id, DocumentStatus status, int rating) { return status == DocumentStatus::ACTUAL; });
+    
+        return complete_search;
+    }
+
+    // перегрузка FindTopDocuments для принятия статусов
+    vector<Document> FindTopDocuments(const string& raw_query, DocumentStatus given_status) const {
+        vector<Document> complete_search = FindTopDocuments(raw_query, [given_status](int document_id, DocumentStatus status, int rating) { return status == given_status; });
+    
+        return complete_search;
+    }
+
+    int GetDocumentCount() const {
+        return document_count_;
+    }
+
+    tuple<vector<string>, DocumentStatus> MatchDocument(const string& raw_query, int document_id) const {
+        
+        PlusMinusWords prepared_query = ParseQuery(raw_query);
+
+        for (const string& minus_word : prepared_query.minus_words) {
+            if (index_.count(minus_word) == 1) {
+                if (index_.at(minus_word).count(document_id) == 1) {
+                    return {vector<string>{}, document_status_.at(document_id)}; 
+                }
+            }
+        }
+
+        set<string> plus_words_in_document;
+
+        for (const string& plus_word : prepared_query.plus_words) {
+            if (index_.count(plus_word) == 1) {
+                if (index_.at(plus_word).count(document_id) == 1) {
+                    plus_words_in_document.insert(plus_word);
+                }
+            }
+        }
+
+        vector<string> result_intersection;
+        for (const string& word : plus_words_in_document) {
+            result_intersection.push_back(word);
+        }
+
+        return {result_intersection, document_status_.at(document_id)};
     }
 
 private:
@@ -97,6 +176,10 @@ private:
     };
 
     int document_count_ = 0;
+
+    map<int, int> documents_rating_;
+
+    map<int, DocumentStatus> document_status_;
 
     map<string, map<int, double>> TF_;
 
@@ -124,7 +207,7 @@ private:
 
         for (const string& word : SplitIntoWordsNoStop(text)) {
             if (word[0] == '-') {
-                query_words.minus_words.insert(word.substr(1, word.size()));
+                query_words.minus_words.insert(word.substr(1));
             } else {
                 if (query_words.minus_words.count(word) == 0) {
                     query_words.plus_words.insert(word);
@@ -134,13 +217,14 @@ private:
         return query_words;
     }
 
-    vector<Document> FindAllDocuments(const PlusMinusWords& query_words) const {
+    template <typename T>
+    vector<Document> FindAllDocuments(const PlusMinusWords& query_words, T filter) const {
 
         /* Рассчитываем IDF каждого плюс-слова в запросе:
         1) количество документов document_count_ делим на количество документов, где это слово встречается;
         2) берем от полученного значения log.
 
-        Функция AddDocument построила index_, где каждому слову отнесено мнодество документов, где оно встречается.
+        Функция AddDocument построила index_, где каждому слову отнесено множество документов, где оно встречается.
         */
 
         map<string, double> idf; // в результате получим слово из запроса и его посчитанный IDF (не факт, что все слова из запроса обрели IDF, ведь слова может не быть в индексе, а значит знаменателя нет).
@@ -175,13 +259,34 @@ private:
             }
         }
 
+        /* и еще пройтись filter, чтобы соответствовали запросу: id, status, rating */
+
+        vector<int> for_erase;
+        for (const auto& [document_id, relevance] : matched_documents) {
+            if (!filter(document_id, document_status_.at(document_id), documents_rating_.at(document_id))) {
+                for_erase.push_back(document_id);
+            }
+        }
+
+        for (int document_id: for_erase) {
+            matched_documents.erase(document_id);
+        }
+
         vector<Document> result;
 
         for (const auto& [document_id, relevance] : matched_documents) {
-            result.push_back({document_id, relevance});
+            result.push_back({document_id, relevance, documents_rating_.at(document_id)});
         }
 
         return result;
+    }
+
+    static int ComputeAverageRating(const vector<int>& ratings) {
+
+        if (ratings.size() > 0) {
+            return accumulate(ratings.begin(), ratings.end(), 0.0) / static_cast<int>(ratings.size());
+        }
+        return 0; // если нет оценок, по условию рэйтинг такого документа равен нулю
     }
 };
 
@@ -192,58 +297,91 @@ SearchServer CreateSearchServer() {
 
     const int document_count = ReadLineWithNumber();
     for (int document_id = 0; document_id < document_count; ++document_id) {
-        search_server.AddDocument(document_id, ReadLine());
+        string document = ReadLine();
+
+        int status;
+        cin >> status;
+        DocumentStatus converted_status = static_cast<DocumentStatus>(status);
+
+        vector<string> ratings_line = SplitIntoWords(ReadLine());
+        vector<int> ratings;
+
+        if (ratings_line.size() > 0 && stoi(ratings_line[0]) > 0) {
+            for (int i = 1; i <= stoi(ratings_line[0]); ++i) {
+                ratings.push_back(stoi(ratings_line[i]));
+            }
+        }
+
+        search_server.AddDocument(document_id, document, converted_status, ratings);
     }
 
     return search_server;
 }
 
 int main() {
+     SearchServer search_server;
+    const std::vector<int> ratings0 = {1, 2, 3 , 4 , 5};
+    const std::vector<int> ratings1 = {-1, -2, 30 , -3, 44 , 5};
+    const std::vector<int> ratings2 = {12, -20, 80 , 0, 8, 0, 0, 9, 67};
+    const std::vector<int> ratings3 = {1, 2, 3, 4, 4, 3, 2, 1};
+    const std::vector<int> ratings4 = {3};
+    const std::vector<int> ratings5 = {5, 5, 5, 8};
+    const std::vector<int> ratings6 = {-105, -30, 15};
+    const std::vector<int> ratings7 = {-105, -30, 10};
+    const std::vector<int> ratings8 = {100};
 
-    const SearchServer search_server = CreateSearchServer();
 
-    const string query = ReadLine();
 
-    for (const auto& [document_id, relevance] : search_server.FindTopDocuments(query)) {
-        cout << "{ document_id = "s << document_id << ", "
-             << "relevance = "s << relevance << " }"s << endl;
+    search_server.AddDocument(0, "belyi kot i modnyi osheinik", DocumentStatus::ACTUAL, ratings0);
+    search_server.AddDocument(1, "pushistyi kot pushistyi hvost", DocumentStatus::ACTUAL, ratings1);
+    search_server.AddDocument(2, "uhozhennyi pes byrazitelnye glaza", DocumentStatus::ACTUAL, ratings2);
+    search_server.AddDocument(3, "uhozhennyi skvorec evgenyi", DocumentStatus::IRRELEVANT, ratings3);
+    search_server.AddDocument(4, "uhozhennyi uhod", DocumentStatus::REMOVED, ratings4);
+    search_server.AddDocument(5, "uho gorlo kot pes po akcii", DocumentStatus::REMOVED, ratings5);
+    search_server.AddDocument(6, "pushistyi", DocumentStatus::REMOVED, ratings6);
+    search_server.AddDocument(7, "uhozhennyi", DocumentStatus::IRRELEVANT, ratings7);
+    search_server.AddDocument(8, "kot", DocumentStatus::IRRELEVANT, ratings8);
+
+
+
+    const SearchServer const_search_server = search_server;
+    const std::string query = "pushistyi i uhozhennyi kot";
+    for (const Document& document : const_search_server.FindTopDocuments(query, [](int document_id, DocumentStatus status, int rating) {
+        return status == DocumentStatus::REMOVED || status == DocumentStatus::IRRELEVANT;}
+        )) {
+        std::cout << "{ "
+                << "document_id = " << document.id << ", "
+                << "relevance = " << document.relevance << ", "
+                << "rating = " << document.rating
+                << " }" << std::endl;
     }
 }
 
-/*
-с в на вы около без и
-14
-очень красивый прям очень красивый пёс найден в лесу около дом книги
-голубая канарейка плавает в озере в утками кто потерял идите в парк победы
-белый кот ходит вокруг дом быт и по цепи
-кот красивый без ошейника с дырявым ухом с стриженными ногтями
-дог с красивыми стриженными волосами убежал в районе ломоносовская
-найден домашний таракан с усами
-собака потеряшка ломоносовская
-грязный кот ошивается около телебашни
-ухоженный ребенок породы хаски временно живет на жд станции буратино
-голубая канарейка и таракан нашли друг в друге хозяев на станции парнас
-красивый африканский морж скоро приедет в зоопарк . принимать солнечные ванны
-ухоженный заяц с дырявым ухом ищет хозяев
-родители вы в своем уме найден ребенок внимание найден ребенок родители отзовитесь
-хороший мультфильм ремейк буратино выходит на наших радиостанциях
-пропал ребенок помогите найти где он ошивается он наш друг с дырявым пальцем -кот
 
-s v na vy okolo bez i
-14
-ochen krasivyj pryam ochen krasivyj pes najden v lesu okolo dom knigi
-golubaya kanarejka plavaet v ozere v utkami kto poteryal idite v park pobedy
-belyj kot hodit vokrug dom byt i po cepi
-kot krasivyj bez oshejnika s dyryavym uhom s strizhennymi nogtyami
-dog s krasivymi strizhennymi volosami ubezhal v rajone lomonosovskaya
-najden domashnij tarakan s usami
-sobaka poteryashka lomonosovskaya
-gryaznyj kot oshivaetsya okolo telebashni
-uhozhennyj rebenok porody haski vremenno zhivet na zhd stancii buratino
-golubaya kanarejka i tarakan nashli drug v druge hozyaev na stancii parnas
-krasivyj afrikanskij morzh skoro priedet v zoopark . prinimat solnechnye vanny
-uhozhennyj zayac s dyryavym uhom ishchet hozyaev
-roditeli vy v svoem ume najden rebenok vnimanie najden rebenok roditeli otzovites
-horoshij multfilm remejk buratino vyhodit na nashih radiostanciyah
-propal rebenok pomogite najti gde on oshivaetsya on nash drug s dyryavym palcem -kot
-*/
+/* int main() {
+    SearchServer search_server;
+    search_server.SetStopWords("и в на"s);
+
+    search_server.AddDocument(0, "белый кот и модный ошейник"s,        DocumentStatus::ACTUAL, {8, -3});
+    search_server.AddDocument(1, "пушистый кот пушистый хвост"s,       DocumentStatus::ACTUAL, {7, 2, 7});
+    search_server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, {5, -12, 2, 1});
+    search_server.AddDocument(3, "ухоженный скворец евгений"s,         DocumentStatus::BANNED, {9});
+    // search_server.AddDocument(4, "uhozhennyi uhodit"s,         DocumentStatus::ACTUAL, {});
+
+    cout << "ACTUAL by default:"s << endl;
+    for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s)) {
+        PrintDocument(document);
+    }
+
+    cout << "BANNED:"s << endl;
+    for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s, DocumentStatus::BANNED)) {
+        PrintDocument(document);
+    }
+
+    cout << "Even ids:"s << endl;
+    for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s, [](int document_id, DocumentStatus status, int rating) { return document_id % 2 == 0; })) {
+        PrintDocument(document);
+    }
+
+    return 0;
+} */
