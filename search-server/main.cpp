@@ -50,9 +50,9 @@ vector<string> SplitIntoWords(const string& text) {
 
 
 struct Document {
-    int id;
-    double relevance;
-    int rating;
+    int id = 0;
+    double relevance = 0.0;
+    int rating = 0;
 };
 
 
@@ -120,15 +120,8 @@ public:
         return matched_documents;
     }
 
-    // перегрузка FindTopDocuments для одиноко переданного запроса (тогда будут выдаваться актуальные по статусу документы)
-    vector<Document> FindTopDocuments(const string& raw_query) const {
-        vector<Document> complete_search = FindTopDocuments(raw_query, [](int document_id, DocumentStatus status, int rating) { return status == DocumentStatus::ACTUAL; });
-    
-        return complete_search;
-    }
-
     // перегрузка FindTopDocuments для принятия статусов
-    vector<Document> FindTopDocuments(const string& raw_query, DocumentStatus given_status) const {
+    vector<Document> FindTopDocuments(const string& raw_query, DocumentStatus given_status = DocumentStatus::ACTUAL) const {
         vector<Document> complete_search = FindTopDocuments(raw_query, [given_status](int document_id, DocumentStatus status, int rating) { return status == given_status; });
     
         return complete_search;
@@ -356,32 +349,3 @@ int main() {
                 << " }" << std::endl;
     }
 }
-
-
-/* int main() {
-    SearchServer search_server;
-    search_server.SetStopWords("и в на"s);
-
-    search_server.AddDocument(0, "белый кот и модный ошейник"s,        DocumentStatus::ACTUAL, {8, -3});
-    search_server.AddDocument(1, "пушистый кот пушистый хвост"s,       DocumentStatus::ACTUAL, {7, 2, 7});
-    search_server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, {5, -12, 2, 1});
-    search_server.AddDocument(3, "ухоженный скворец евгений"s,         DocumentStatus::BANNED, {9});
-    // search_server.AddDocument(4, "uhozhennyi uhodit"s,         DocumentStatus::ACTUAL, {});
-
-    cout << "ACTUAL by default:"s << endl;
-    for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s)) {
-        PrintDocument(document);
-    }
-
-    cout << "BANNED:"s << endl;
-    for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s, DocumentStatus::BANNED)) {
-        PrintDocument(document);
-    }
-
-    cout << "Even ids:"s << endl;
-    for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s, [](int document_id, DocumentStatus status, int rating) { return document_id % 2 == 0; })) {
-        PrintDocument(document);
-    }
-
-    return 0;
-} */
