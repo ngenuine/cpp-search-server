@@ -1,12 +1,15 @@
-#include <algorithm>
+//#include "search_server.h"
+
 #include <iostream>
-#include <set>
-#include <map>
-#include <string>
-#include <vector>
-#include <cmath>
 #include <numeric>
 #include <tuple>
+#include <algorithm>
+#include <cmath>
+#include <map>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 using namespace std;
 
@@ -61,14 +64,59 @@ enum class DocumentStatus {
         IRRELEVANT,
         BANNED,
         REMOVED,
-    };
+};
 
-void PrintDocument(const Document& document) {
-    cout << "{ "s
-         << "document_id = "s << document.id << ", "s
-         << "relevance = "s << document.relevance << ", "s
-         << "rating = "s << document.rating
-         << " }"s << endl;
+template<typename K, typename V>
+ostream& operator<<(ostream& output, const pair<K, V>& p) {
+
+    output << p.first << ": " << p.second;
+
+    return output;
+}
+
+template<typename ContainerType>
+void PrintContainer(ostream& output, const ContainerType& container) {
+    bool is_first = true;
+    for (auto elem : container) {
+        
+        if (!is_first) {
+            output << ", ";
+        }
+
+        is_first = false;
+
+        output << elem;
+    }
+}
+
+template<typename K, typename V>
+ostream& operator<<(ostream& output, const map<K, V>& m) {
+
+    output << '{';
+    PrintContainer(output, m);
+    output << '}';
+
+    return output;
+}
+
+template<typename T>
+ostream& operator<<(ostream& output, const vector<T>& v) {
+
+    output << '[';
+    PrintContainer(output, v);
+    output << ']';
+
+    return output;
+}
+
+template<typename T>
+ostream& operator<<(ostream& output, const set<T>& s) {
+
+    output << '{';
+    PrintContainer(output, s);
+    output << '}';
+
+    return output;
 }
 
 class SearchServer {
@@ -216,7 +264,6 @@ private:
         /* Рассчитываем IDF каждого плюс-слова в запросе:
         1) количество документов document_count_ делим на количество документов, где это слово встречается;
         2) берем от полученного значения log.
-
         Функция AddDocument построила index_, где каждому слову отнесено множество документов, где оно встречается.
         */
 
@@ -257,12 +304,8 @@ private:
         vector<int> for_erase;
         for (const auto& [document_id, relevance] : matched_documents) {
             if (!filter(document_id, document_status_.at(document_id), documents_rating_.at(document_id))) {
-                for_erase.push_back(document_id);
+                matched_documents.erase(document_id);
             }
-        }
-
-        for (int document_id: for_erase) {
-            matched_documents.erase(document_id);
         }
 
         vector<Document> result;
@@ -283,69 +326,270 @@ private:
     }
 };
 
-SearchServer CreateSearchServer() {
-
-    SearchServer search_server;
-    search_server.SetStopWords(ReadLine());
-
-    const int document_count = ReadLineWithNumber();
-    for (int document_id = 0; document_id < document_count; ++document_id) {
-        string document = ReadLine();
-
-        int status;
-        cin >> status;
-        DocumentStatus converted_status = static_cast<DocumentStatus>(status);
-
-        vector<string> ratings_line = SplitIntoWords(ReadLine());
-        vector<int> ratings;
-
-        if (ratings_line.size() > 0 && stoi(ratings_line[0]) > 0) {
-            for (int i = 1; i <= stoi(ratings_line[0]); ++i) {
-                ratings.push_back(stoi(ratings_line[i]));
-            }
+template <typename T, typename U>
+void AssertEqualImpl(const T& t, const U& u, const string& t_str, const string& u_str, const string& file,
+                     const string& func, unsigned line, const string& hint) {
+    if (t != u) {
+        cerr << boolalpha;
+        cerr << file << "("s << line << "): "s << func << ": "s;
+        cerr << "ASSERT_EQUAL("s << t_str << ", "s << u_str << ") failed: "s;
+        cerr << t << " != "s << u << "."s;
+        if (!hint.empty()) {
+            cerr << " Hint: "s << hint;
         }
-
-        search_server.AddDocument(document_id, document, converted_status, ratings);
+        cerr << endl;
+        abort();
     }
-
-    return search_server;
 }
 
-int main() {
-     SearchServer search_server;
-    const std::vector<int> ratings0 = {1, 2, 3 , 4 , 5};
-    const std::vector<int> ratings1 = {-1, -2, 30 , -3, 44 , 5};
-    const std::vector<int> ratings2 = {12, -20, 80 , 0, 8, 0, 0, 9, 67};
-    const std::vector<int> ratings3 = {1, 2, 3, 4, 4, 3, 2, 1};
-    const std::vector<int> ratings4 = {3};
-    const std::vector<int> ratings5 = {5, 5, 5, 8};
-    const std::vector<int> ratings6 = {-105, -30, 15};
-    const std::vector<int> ratings7 = {-105, -30, 10};
-    const std::vector<int> ratings8 = {100};
+#define ASSERT_EQUAL(a, b) AssertEqualImpl((a), (b), #a, #b, __FILE__, __FUNCTION__, __LINE__, ""s)
 
+#define ASSERT_EQUAL_HINT(a, b, hint) AssertEqualImpl((a), (b), #a, #b, __FILE__, __FUNCTION__, __LINE__, (hint))
 
-
-    search_server.AddDocument(0, "belyi kot i modnyi osheinik", DocumentStatus::ACTUAL, ratings0);
-    search_server.AddDocument(1, "pushistyi kot pushistyi hvost", DocumentStatus::ACTUAL, ratings1);
-    search_server.AddDocument(2, "uhozhennyi pes byrazitelnye glaza", DocumentStatus::ACTUAL, ratings2);
-    search_server.AddDocument(3, "uhozhennyi skvorec evgenyi", DocumentStatus::IRRELEVANT, ratings3);
-    search_server.AddDocument(4, "uhozhennyi uhod", DocumentStatus::REMOVED, ratings4);
-    search_server.AddDocument(5, "uho gorlo kot pes po akcii", DocumentStatus::REMOVED, ratings5);
-    search_server.AddDocument(6, "pushistyi", DocumentStatus::REMOVED, ratings6);
-    search_server.AddDocument(7, "uhozhennyi", DocumentStatus::IRRELEVANT, ratings7);
-    search_server.AddDocument(8, "kot", DocumentStatus::IRRELEVANT, ratings8);
-
-
-
-    const SearchServer const_search_server = search_server;
-    const std::string query = "pushistyi i uhozhennyi kot";
-    for (const Document& document : const_search_server.FindTopDocuments(query, [](int document_id, DocumentStatus status, int rating) {
-        return status == DocumentStatus::REMOVED || status == DocumentStatus::IRRELEVANT;}
-        )) {
-        std::cout << "{ "
-                << "document_id = " << document.id << ", "
-                << "relevance = " << document.relevance << ", "
-                << "rating = " << document.rating
-                << " }" << std::endl;
+void AssertImpl(bool value, const string& expr_str, const string& file, const string& func, unsigned line,
+                const string& hint) {
+    if (!value) {
+        cerr << file << "("s << line << "): "s << func << ": "s;
+        cerr << "ASSERT("s << expr_str << ") failed."s;
+        if (!hint.empty()) {
+            cerr << " Hint: "s << hint;
+        }
+        cerr << endl;
+        abort();
     }
+}
+
+#define ASSERT(expr) AssertImpl(!!(expr), #expr, __FILE__, __FUNCTION__, __LINE__, ""s)
+
+#define ASSERT_HINT(expr, hint) AssertImpl(!!(expr), #expr, __FILE__, __FUNCTION__, __LINE__, (hint))
+
+template <typename ReturnedType>
+void RunTestImpl(ReturnedType func, const string& func_name) {
+    func();
+    cerr << func_name << " OK"s << endl;
+}
+
+#define RUN_TEST(func) RunTestImpl((func), #func)
+
+// -------- Начало модульных тестов поисковой системы ----------
+
+void TestAddingDocuments() {
+    int id1 = 35;
+    string content1 = "spider man and doctor stiven strange with hulk"s;
+    vector<int> ratings1 = {4, 5, 6, 5};
+
+    {
+        SearchServer search_server;
+        search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
+        vector<Document> answer = search_server.FindTopDocuments("stiven"s);
+        ASSERT_EQUAL_HINT(answer.size(), 1, "Size of search results should be 1");
+        ASSERT_EQUAL(answer[0].id, 35);
+    }
+
+}
+
+void TestExcludingStopWords() {
+    int id1 = 35;
+    string content1 = "spider man and doctor stiven strange with hulk"s;
+    vector<int> ratings1 = {4, 5, 6, 5};
+
+    {
+        SearchServer search_server;
+        search_server.SetStopWords("with and");
+        search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
+        ASSERT_HINT(search_server.FindTopDocuments("and with"s).empty(), "Search result should be empty");
+    }
+}
+
+void TestExcludingMinusWords() {
+    int id1 = 35;
+    string content1 = "spider man and doctor stiven strange with hulk"s;
+    vector<int> ratings1 = {4, 5, 6, 5};
+
+    int id2 = 45;
+    string content2 = "spider man and doctor stiven strange with neo"s;
+    vector<int> ratings2 = {4, 5, 1};
+
+    {
+        SearchServer search_server;
+        search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
+        search_server.AddDocument(id2, content2, DocumentStatus::ACTUAL, ratings2);
+        vector<Document> answer = search_server.FindTopDocuments("spider man -hulk"s);
+        ASSERT_EQUAL_HINT(answer.size(), 1, "Search engine doesn't exclude query witn minus-words");
+        ASSERT_EQUAL(answer[0].id, 45);
+    }
+}
+
+void TestMatchingDocument() {
+    int id1 = 35;
+    string content1 = "spider man and doctor stiven strange with hulk"s;
+    vector<int> ratings1 = {4, 5, 6, 5};
+
+    {
+        SearchServer search_server;
+        search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
+        tuple<vector<string>, DocumentStatus> answer1 = search_server.MatchDocument("spider man -hulk"s, 35);
+        tuple<vector<string>, DocumentStatus> answer2 = search_server.MatchDocument("spider hulk"s, 35);
+        ASSERT_EQUAL(get<0>(answer1).size(), 0);
+        vector<string> intersection = {"hulk"s, "spider"s};
+        ASSERT_EQUAL(get<0>(answer2), intersection);
+    }
+}
+
+void TestSortingByRelevanceOrRating() {
+    
+    {
+        int id1 = 3;
+        string content1 = "spider man and doctor stiven strange with hulk"s;
+        vector<int> ratings1 = {4, 5, 6, 5};
+        int id2 = 2;
+        string content2 = "scooby dooby man our pretty fan you should finger flip pa-pa-pam"s;
+        vector<int> ratings2 = {1, 2, 4};
+        int id3 = 1;
+        string content3 = "pretty woman with hulk"s;
+        vector<int> ratings3 = {4, 4, 4};
+
+        SearchServer search_server;
+        search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
+        search_server.AddDocument(id2, content2, DocumentStatus::ACTUAL, ratings2);
+        search_server.AddDocument(id3, content3, DocumentStatus::ACTUAL, ratings3);
+
+        vector<Document> answer = search_server.FindTopDocuments("spider man and hulk"s);
+        ASSERT_EQUAL(answer[0].id, 3);
+        ASSERT_EQUAL(answer[1].id, 1);
+        ASSERT_EQUAL(answer[2].id, 2);
+    }
+
+    {
+        int id1 = 3;
+        string content1 = "spider man and doctor stiven strange with hulk"s;
+        vector<int> ratings1 = {};
+        int id2 = 15;
+        string content2 = "spider man and doctor stiven strange with hulk"s;
+        vector<int> ratings2 = {100};
+        int id3 = 400;
+        string content3 = "spider man and doctor stiven strange with hulk"s;
+        vector<int> ratings3 = {500};
+
+        SearchServer search_server;
+        search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
+        search_server.AddDocument(id2, content2, DocumentStatus::ACTUAL, ratings2);
+        search_server.AddDocument(id3, content3, DocumentStatus::ACTUAL, ratings3);
+
+        vector<Document> answer = search_server.FindTopDocuments("spider scooby pretty"s);
+        ASSERT_EQUAL(answer[0].id, 400);
+        ASSERT_EQUAL(answer[1].id, 15);
+        ASSERT_EQUAL(answer[2].id, 3);
+    }
+}
+
+void TestCalculateRating() {
+    int id1 = 3;
+    string content1 = "spider man and doctor stiven strange with hulk"s;
+    vector<int> ratings1 = {4, 5, 6, 5};
+    int id2 = 2;
+    string content2 = "black cat and harry potter play hard"s;
+    vector<int> ratings2 = {};
+
+    {
+        SearchServer search_server;
+        search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
+        search_server.AddDocument(id2, content2, DocumentStatus::ACTUAL, ratings2);
+
+        vector<Document> answer = search_server.FindTopDocuments("spider man and hulk"s);
+        ASSERT_EQUAL(answer[0].rating, 5);
+        ASSERT_EQUAL(answer[1].id, 0);
+    }
+}
+
+void TestPredicateAsFilter() {
+    int id1 = 3;
+    string content1 = "spider man and doctor stiven strange with hulk"s;
+    vector<int> ratings1 = {4, 5, 6, 5};
+    int id2 = 2;
+    string content2 = "scooby dooby man our pretty fan you should finger flip pa-pa-pam"s;
+    vector<int> ratings2 = {1, 2, 4};
+    int id3 = 1;
+    string content3 = "pretty woman with hulk"s;
+    vector<int> ratings3 = {4, 4, 4};
+
+    {
+        SearchServer search_server;
+        search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
+        search_server.AddDocument(id2, content2, DocumentStatus::ACTUAL, ratings2);
+        search_server.AddDocument(id3, content3, DocumentStatus::ACTUAL, ratings3);
+
+        auto predicate = [](const int& id, const DocumentStatus& status, const int& rating) {
+            return id > 2;
+        };
+
+        vector<Document> answer = search_server.FindTopDocuments("spider man and hulk"s, predicate);
+        ASSERT_EQUAL(answer.size(), 1);
+    }
+}
+
+void TestGivenStatusAsFilter() {
+    int id1 = 3;
+    string content1 = "spider man and doctor stiven strange with hulk"s;
+    vector<int> ratings1 = {4, 5, 6, 5};
+    int id2 = 2;
+    string content2 = "scooby dooby man our pretty fan you should finger flip pa-pa-pam"s;
+    vector<int> ratings2 = {1, 2, 4};
+    int id3 = 1;
+    string content3 = "pretty woman with hulk"s;
+    vector<int> ratings3 = {4, 4, 4};
+
+    {
+        SearchServer search_server;
+        search_server.AddDocument(id1, content1, DocumentStatus::IRRELEVANT, ratings1);
+        search_server.AddDocument(id2, content2, DocumentStatus::BANNED, ratings2);
+        search_server.AddDocument(id3, content3, DocumentStatus::ACTUAL, ratings3);
+
+        vector<Document> answer1 = search_server.FindTopDocuments("spider man and hulk"s, DocumentStatus::IRRELEVANT);
+        ASSERT_EQUAL(answer1[0].id, 3);
+    }
+}
+
+void TestIsCorrectRelevance() {
+    int id1 = 3;
+    string content1 = "spider man and doctor stiven strange with hulk"s;
+    vector<int> ratings1 = {4, 5, 6, 5};
+    int id2 = 2;
+    string content2 = "scooby dooby man our pretty fan you should finger flip pa-pa-pam"s;
+    vector<int> ratings2 = {1, 2, 4};
+    int id3 = 1;
+    string content3 = "pretty woman with hulk"s;
+    vector<int> ratings3 = {4, 4, 4};
+
+    {
+        SearchServer search_server;
+        search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
+        search_server.AddDocument(id2, content2, DocumentStatus::ACTUAL, ratings2);
+        search_server.AddDocument(id3, content3, DocumentStatus::ACTUAL, ratings3);
+
+        vector<Document> answer = search_server.FindTopDocuments("spider man and hulk"s);
+
+        ASSERT(round(answer[0].relevance * 10000) / 10000 - 0.3760 <= 10e-6);
+        ASSERT(round(answer[1].relevance * 10000) / 10000 - 0.1014 <= 10e-6);
+        ASSERT(round(answer[2].relevance * 10000) / 10000 - 0.0369 <= 10e-6);
+    }
+}
+
+// Функция TestSearchServer является точкой входа для запуска тестов
+void TestSearchServer() {
+    RUN_TEST(TestAddingDocuments);
+    RUN_TEST(TestExcludingStopWords);
+    RUN_TEST(TestExcludingMinusWords);
+    RUN_TEST(TestMatchingDocument);
+    RUN_TEST(TestSortingByRelevanceOrRating);
+    RUN_TEST(TestPredicateAsFilter);
+    RUN_TEST(TestGivenStatusAsFilter);
+    RUN_TEST(TestIsCorrectRelevance);
+}
+
+// --------- Окончание модульных тестов поисковой системы -----------
+
+int main() {
+    TestSearchServer();
+    cerr << "Search server testing finished"s << endl;
 }
