@@ -374,24 +374,23 @@ void RunTestImpl(ReturnedType func, const string& func_name) {
 // -------- Начало модульных тестов поисковой системы ----------
 
 void TestAddingDocuments() {
-    int id1 = 35;
-    string content1 = "spider man and doctor stiven strange with hulk"s;
-    vector<int> ratings1 = {4, 5, 6, 5};
+    const int id1 = 35;
+    const string content1 = "spider man and doctor stiven strange with hulk"s;
+    const vector<int> ratings1 = {4, 5, 6, 5};
 
     {
         SearchServer search_server;
         search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
         vector<Document> answer = search_server.FindTopDocuments("stiven"s);
         ASSERT_EQUAL_HINT(answer.size(), 1, "Size of search results should be 1");
-        ASSERT_EQUAL(answer[0].id, 35);
+        ASSERT_EQUAL(answer[0].id, id1);
     }
-
 }
 
 void TestExcludingStopWords() {
-    int id1 = 35;
-    string content1 = "spider man and doctor stiven strange with hulk"s;
-    vector<int> ratings1 = {4, 5, 6, 5};
+    const int id1 = 35;
+    const string content1 = "spider man and doctor stiven strange with hulk"s;
+    const vector<int> ratings1 = {4, 5, 6, 5};
 
     {
         SearchServer search_server;
@@ -402,13 +401,13 @@ void TestExcludingStopWords() {
 }
 
 void TestExcludingMinusWords() {
-    int id1 = 35;
-    string content1 = "spider man and doctor stiven strange with hulk"s;
-    vector<int> ratings1 = {4, 5, 6, 5};
+    const int id1 = 35;
+    const string content1 = "spider man and doctor stiven strange with hulk"s;
+    const vector<int> ratings1 = {4, 5, 6, 5};
 
-    int id2 = 45;
-    string content2 = "spider man and doctor stiven strange with neo"s;
-    vector<int> ratings2 = {4, 5, 1};
+    const int id2 = 45;
+    const string content2 = "spider man and doctor stiven strange with neo"s;
+    const vector<int> ratings2 = {4, 5, 1};
 
     {
         SearchServer search_server;
@@ -416,38 +415,39 @@ void TestExcludingMinusWords() {
         search_server.AddDocument(id2, content2, DocumentStatus::ACTUAL, ratings2);
         vector<Document> answer = search_server.FindTopDocuments("spider man -hulk"s);
         ASSERT_EQUAL_HINT(answer.size(), 1, "Search engine doesn't exclude query witn minus-words");
-        ASSERT_EQUAL(answer[0].id, 45);
+        ASSERT_EQUAL(answer[0].id, id2);
     }
 }
 
 void TestMatchingDocument() {
-    int id1 = 35;
-    string content1 = "spider man and doctor stiven strange with hulk"s;
-    vector<int> ratings1 = {4, 5, 6, 5};
+    const int id1 = 35;
+    const string content1 = "spider man and doctor stiven strange with hulk"s;
+    const vector<int> ratings1 = {4, 5, 6, 5};
 
     {
         SearchServer search_server;
         search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
-        tuple<vector<string>, DocumentStatus> answer1 = search_server.MatchDocument("spider man -hulk"s, 35);
-        tuple<vector<string>, DocumentStatus> answer2 = search_server.MatchDocument("spider hulk"s, 35);
+        tuple<vector<string>, DocumentStatus> answer1 = search_server.MatchDocument("spider man -hulk"s, id1);
         ASSERT_EQUAL(get<0>(answer1).size(), 0);
-        vector<string> intersection = {"hulk"s, "spider"s};
+        
+        tuple<vector<string>, DocumentStatus> answer2 = search_server.MatchDocument("spider hulk"s, id1);
+        const vector<string> intersection = {"hulk"s, "spider"s};
         ASSERT_EQUAL(get<0>(answer2), intersection);
     }
 }
 
-void TestSortingByRelevanceOrRating() {
+void TestSortingByRelevance() {
     
     {
-        int id1 = 3;
-        string content1 = "spider man and doctor stiven strange with hulk"s;
-        vector<int> ratings1 = {4, 5, 6, 5};
-        int id2 = 2;
-        string content2 = "scooby dooby man our pretty fan you should finger flip pa-pa-pam"s;
-        vector<int> ratings2 = {1, 2, 4};
-        int id3 = 1;
-        string content3 = "pretty woman with hulk"s;
-        vector<int> ratings3 = {4, 4, 4};
+        const int id1 = 3;
+        const string content1 = "spider man and doctor stiven strange with hulk"s;
+        const vector<int> ratings1 = {4, 5, 6, 5};
+        const int id2 = 2;
+        const string content2 = "scooby dooby man our pretty fan you should finger flip pa-pa-pam"s;
+        const vector<int> ratings2 = {1, 2, 4};
+        const int id3 = 1;
+        const string content3 = "pretty woman with hulk"s;
+        const vector<int> ratings3 = {4, 4, 4};
 
         SearchServer search_server;
         search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
@@ -455,21 +455,24 @@ void TestSortingByRelevanceOrRating() {
         search_server.AddDocument(id3, content3, DocumentStatus::ACTUAL, ratings3);
 
         vector<Document> answer = search_server.FindTopDocuments("spider man and hulk"s);
-        ASSERT_EQUAL(answer[0].id, 3);
-        ASSERT_EQUAL(answer[1].id, 1);
-        ASSERT_EQUAL(answer[2].id, 2);
+        ASSERT_EQUAL(answer[0].id, id1);
+        ASSERT_EQUAL(answer[1].id, id3);
+        ASSERT_EQUAL(answer[2].id, id2);
     }
+}
+
+void TestSortingByRating() {
 
     {
-        int id1 = 3;
-        string content1 = "spider man and doctor stiven strange with hulk"s;
-        vector<int> ratings1 = {};
-        int id2 = 15;
-        string content2 = "spider man and doctor stiven strange with hulk"s;
-        vector<int> ratings2 = {100};
-        int id3 = 400;
-        string content3 = "spider man and doctor stiven strange with hulk"s;
-        vector<int> ratings3 = {500};
+        const int id1 = 3;
+        const string content1 = "spider man and doctor stiven strange with hulk"s;
+        const vector<int> ratings1 = {};
+        const int id2 = 15;
+        const string content2 = "spider man and doctor stiven strange with hulk"s;
+        const vector<int> ratings2 = {100};
+        const int id3 = 400;
+        const string content3 = "spider man and doctor stiven strange with hulk"s;
+        const vector<int> ratings3 = {500};
 
         SearchServer search_server;
         search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
@@ -477,19 +480,24 @@ void TestSortingByRelevanceOrRating() {
         search_server.AddDocument(id3, content3, DocumentStatus::ACTUAL, ratings3);
 
         vector<Document> answer = search_server.FindTopDocuments("spider scooby pretty"s);
-        ASSERT_EQUAL(answer[0].id, 400);
-        ASSERT_EQUAL(answer[1].id, 15);
-        ASSERT_EQUAL(answer[2].id, 3);
+        ASSERT_EQUAL(answer[0].id, id3);
+        ASSERT_EQUAL(answer[1].id, id2);
+        ASSERT_EQUAL(answer[2].id, id1);
     }
 }
 
 void TestCalculateRating() {
-    int id1 = 3;
-    string content1 = "spider man and doctor stiven strange with hulk"s;
-    vector<int> ratings1 = {4, 5, 6, 5};
-    int id2 = 2;
-    string content2 = "black cat and harry potter play hard"s;
-    vector<int> ratings2 = {};
+    const int id1 = 3;
+    const string content1 = "spider man and doctor stiven strange with hulk"s;
+    const vector<int> ratings1 = {4, 5, 6, 5};
+    const int id2 = 2;
+    const string content2 = "black cat and harry potter play hard"s;
+    const vector<int> ratings2 = {};
+
+    const int ZERO_RATING = 0;
+
+    int expected_rating1 = (4 + 5 + 6 + 5) / 4;
+    int expected_rating2 = ZERO_RATING;
 
     {
         SearchServer search_server;
@@ -497,21 +505,21 @@ void TestCalculateRating() {
         search_server.AddDocument(id2, content2, DocumentStatus::ACTUAL, ratings2);
 
         vector<Document> answer = search_server.FindTopDocuments("spider man and hulk"s);
-        ASSERT_EQUAL(answer[0].rating, 5);
-        ASSERT_EQUAL(answer[1].id, 0);
+        ASSERT_EQUAL(answer[0].rating, expected_rating1);
+        ASSERT_EQUAL(answer[1].rating, expected_rating2);
     }
 }
 
 void TestPredicateAsFilter() {
-    int id1 = 3;
-    string content1 = "spider man and doctor stiven strange with hulk"s;
-    vector<int> ratings1 = {4, 5, 6, 5};
-    int id2 = 2;
-    string content2 = "scooby dooby man our pretty fan you should finger flip pa-pa-pam"s;
-    vector<int> ratings2 = {1, 2, 4};
-    int id3 = 1;
-    string content3 = "pretty woman with hulk"s;
-    vector<int> ratings3 = {4, 4, 4};
+    const int id1 = 3;
+    const string content1 = "spider man and doctor stiven strange with hulk"s;
+    const vector<int> ratings1 = {4, 5, 6, 5};
+    const int id2 = 2;
+    const string content2 = "scooby dooby man our pretty fan you should finger flip pa-pa-pam"s;
+    const vector<int> ratings2 = {1, 2, 4};
+    const int id3 = 1;
+    const string content3 = "pretty woman with hulk"s;
+    const vector<int> ratings3 = {4, 4, 4};
 
     {
         SearchServer search_server;
@@ -529,15 +537,15 @@ void TestPredicateAsFilter() {
 }
 
 void TestGivenStatusAsFilter() {
-    int id1 = 3;
-    string content1 = "spider man and doctor stiven strange with hulk"s;
-    vector<int> ratings1 = {4, 5, 6, 5};
-    int id2 = 2;
-    string content2 = "scooby dooby man our pretty fan you should finger flip pa-pa-pam"s;
-    vector<int> ratings2 = {1, 2, 4};
-    int id3 = 1;
-    string content3 = "pretty woman with hulk"s;
-    vector<int> ratings3 = {4, 4, 4};
+    const int id1 = 3;
+    const string content1 = "spider man and doctor stiven strange with hulk"s;
+    const vector<int> ratings1 = {4, 5, 6, 5};
+    const int id2 = 2;
+    const string content2 = "scooby dooby man our pretty fan you should finger flip pa-pa-pam"s;
+    const vector<int> ratings2 = {1, 2, 4};
+    const int id3 = 1;
+    const string content3 = "pretty woman with hulk"s;
+    const vector<int> ratings3 = {4, 4, 4};
 
     {
         SearchServer search_server;
@@ -546,20 +554,20 @@ void TestGivenStatusAsFilter() {
         search_server.AddDocument(id3, content3, DocumentStatus::ACTUAL, ratings3);
 
         vector<Document> answer1 = search_server.FindTopDocuments("spider man and hulk"s, DocumentStatus::IRRELEVANT);
-        ASSERT_EQUAL(answer1[0].id, 3);
+        ASSERT_EQUAL(answer1[0].id, id1);
     }
 }
 
 void TestIsCorrectRelevance() {
-    int id1 = 3;
-    string content1 = "spider man and doctor stiven strange with hulk"s;
-    vector<int> ratings1 = {4, 5, 6, 5};
-    int id2 = 2;
-    string content2 = "scooby dooby man our pretty fan you should finger flip pa-pa-pam"s;
-    vector<int> ratings2 = {1, 2, 4};
-    int id3 = 1;
-    string content3 = "pretty woman with hulk"s;
-    vector<int> ratings3 = {4, 4, 4};
+    const int id1 = 3;
+    const string content1 = "spider man and doctor stiven strange with hulk"s;
+    const vector<int> ratings1 = {4, 5, 6, 5};
+    const int id2 = 2;
+    const string content2 = "scooby dooby man our pretty fan you should finger flip pa-pa-pam"s;
+    const vector<int> ratings2 = {1, 2, 4};
+    const int id3 = 1;
+    const string content3 = "pretty woman with hulk"s;
+    const vector<int> ratings3 = {4, 4, 4};
 
     {
         SearchServer search_server;
@@ -567,11 +575,21 @@ void TestIsCorrectRelevance() {
         search_server.AddDocument(id2, content2, DocumentStatus::ACTUAL, ratings2);
         search_server.AddDocument(id3, content3, DocumentStatus::ACTUAL, ratings3);
 
+        const int precise = 10e-6;
+
         vector<Document> answer = search_server.FindTopDocuments("spider man and hulk"s);
 
-        ASSERT(round(answer[0].relevance * 10000) / 10000 - 0.3760 <= 10e-6);
-        ASSERT(round(answer[1].relevance * 10000) / 10000 - 0.1014 <= 10e-6);
-        ASSERT(round(answer[2].relevance * 10000) / 10000 - 0.0369 <= 10e-6);
+        const double expected_relevance0 = 0.3760;
+        const double expected_relevance1 = 0.1014;
+        const double expected_relevance2 = 0.0369;
+
+        auto approximator = [](const double relevance, const double expected_relevance) {
+            return (round(relevance * 10000) / 10000) - expected_relevance;
+        };
+
+        ASSERT(approximator(answer[0].relevance, expected_relevance0) <= precise);
+        ASSERT(approximator(answer[1].relevance, expected_relevance1) <= precise);
+        ASSERT(approximator(answer[2].relevance, expected_relevance2) <= precise);
     }
 }
 
@@ -581,7 +599,9 @@ void TestSearchServer() {
     RUN_TEST(TestExcludingStopWords);
     RUN_TEST(TestExcludingMinusWords);
     RUN_TEST(TestMatchingDocument);
-    RUN_TEST(TestSortingByRelevanceOrRating);
+    RUN_TEST(TestSortingByRelevance);
+    RUN_TEST(TestSortingByRating);
+    RUN_TEST(TestCalculateRating);
     RUN_TEST(TestPredicateAsFilter);
     RUN_TEST(TestGivenStatusAsFilter);
     RUN_TEST(TestIsCorrectRelevance);
