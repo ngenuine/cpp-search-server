@@ -85,8 +85,6 @@ class SearchServer {
 
 public:
 
-    inline static constexpr int INVALID_DOCUMENT_ID = -1;
-
     // конструктор на основе коллекции vector или set
     template<typename StringContainer>
     explicit SearchServer(const StringContainer& stop_words)
@@ -99,18 +97,23 @@ public:
     // конструктор на основе строки с любым количеством пробелов до, между и после слов
     SearchServer(const string& stop_words_text)
         : SearchServer(SplitIntoWords(stop_words_text)) {
-            ThrowSpecialSymbolInText(stop_words_text);
     }
 
     void AddDocument(int document_id, const string& document, const DocumentStatus& status, const vector<int>& ratings) {
         
         ThrowSpecialSymbolInText(document);
-        ThrowNegativeDocumentId(document_id);
-        ThrowRecurringDocumentId(document_id);
 
-        document_order_[document_count_] = document_id; 
-        // наполняем счетчик документов -- он пригодится для подсчета IDF.
-        ++document_count_;
+        if (IsNegativeDocumentId(document_id)) {
+            throw invalid_argument("Negative document id"s);
+        }
+
+        if (IsRecurringDocumentId(document_id)) {
+            throw invalid_argument("Recurring document id"s);
+        }
+
+        // наполняем счетчик документов ( -- он пригодится для подсчета IDF.
+        // одновременно и порядок добавления получаем
+        document_order_.push_back(document_id); 
 
         document_status_[document_id] = status;
 
@@ -121,7 +124,6 @@ public:
         
         for (const string& word : words) {
             TF_[word][document_id] += 1.0 / words.size(); // Рассчитываем TF каждого слова в каждом документе.
-            index_[word].insert(document_id); // заодно создаем индекс, где по слову можно будет узнать, в каких документах слово есть.
         }
     }
 
@@ -129,12 +131,6 @@ public:
     template <typename Predicate>
     vector<Document> FindTopDocuments(const string& raw_query, Predicate filter) const {
 
-        const vector<string> query_words = SplitIntoWordsNoStop(raw_query);
-
-        ThrowDoubleMinusSymbolsInQuery(query_words);
-        ThrowAloneMinusSymbolInQuery(query_words);
-        ThrowSpecialSymbolInText(raw_query);
-        
         const PlusMinusWords prepared_query = ParseQuery(raw_query);
 
         auto matched_documents = FindAllDocuments(prepared_query, filter);
@@ -160,22 +156,16 @@ public:
     }
 
     int GetDocumentCount() const {
-        return document_count_;
+        return document_order_.size();
     }
 
     tuple<vector<string>, DocumentStatus> MatchDocument(const string& raw_query, int document_id) const {
         
-        const vector<string> query_words = SplitIntoWordsNoStop(raw_query);
-
-        ThrowDoubleMinusSymbolsInQuery(query_words);
-        ThrowAloneMinusSymbolInQuery(query_words);
-        ThrowSpecialSymbolInText(raw_query);
-        
         PlusMinusWords prepared_query = ParseQuery(raw_query);
 
         for (const string& minus_word : prepared_query.minus_words) {
-            if (index_.count(minus_word) == 1) {
-                if (index_.at(minus_word).count(document_id) == 1) {
+            if (TF_.count(minus_word) == 1) {
+                if (TF_.at(minus_word).count(document_id) == 1) {
                     return {vector<string>{}, document_status_.at(document_id)};
                 }
             }
@@ -184,8 +174,8 @@ public:
         set<string> plus_words_in_document;
 
         for (const string& plus_word : prepared_query.plus_words) {
-            if (index_.count(plus_word) == 1) {
-                if (index_.at(plus_word).count(document_id) == 1) {
+            if (TF_.count(plus_word) == 1) {
+                if (TF_.at(plus_word).count(document_id) == 1) {
                     plus_words_in_document.insert(plus_word);
                 }
             }
@@ -201,11 +191,11 @@ public:
     }
 
     int GetDocumentId(int order) const {
-        if (order < 0 || order >= document_count_) {
+        if (order < 0 || order >= document_order_.size()) {
             throw out_of_range("Order of document out of range");
         }
 
-        return document_order_.at(order);
+        return document_order_[order];
     }
 
 private:
@@ -215,13 +205,11 @@ private:
         set<string> minus_words;
     };
 
-    int document_count_ = 0;
     map<int, int> documents_rating_;
     map<int, DocumentStatus> document_status_;
     map<string, map<int, double>> TF_;
-    map<string, set<int>> index_;
     const set<string> stop_words_;
-    map<int, int> document_order_;
+    vector<int> document_order_;
 
     bool IsStopWord(const string& word) const {
         return stop_words_.count(word) > 0;
@@ -237,19 +225,25 @@ private:
         return words;
     }
 
-    PlusMinusWords ParseQuery(const string& text) const {
+    PlusMinusWords ParseQuery(const string& raw_query) const {
 
         PlusMinusWords query_words;
 
-        for (const string& word : SplitIntoWordsNoStop(text)) {
+        ThrowSpecialSymbolInText(raw_query);
+        
+
+        for (const string& word : SplitIntoWordsNoStop(raw_query)) {
             if (word[0] == '-') {
                 query_words.minus_words.insert(word.substr(1));
-            } else {
-                if (query_words.minus_words.count(word) == 0) {
-                    query_words.plus_words.insert(word);
-                }
+            } else if (query_words.minus_words.count(word) == 0) {
+                query_words.plus_words.insert(word);
             }
         }
+
+        if (IsAloneOrDoubleMinusSymbolsInQuery(query_words.minus_words)) {
+            throw invalid_argument("Alone or double minus in query"s);
+        };
+
         return query_words;
     }
 
@@ -257,22 +251,22 @@ private:
     vector<Document> FindAllDocuments(const PlusMinusWords& query_words, Predicate filter) const {
 
         /* Рассчитываем IDF каждого плюс-слова в запросе:
-        1) количество документов document_count_ делим на количество документов, где это слово встречается;
+        1) количество документов document_order_.size() делим на количество документов, где это слово встречается;
         2) берем от полученного значения log.
 
-        Функция AddDocument построила index_, где каждому слову отнесено множество документов, где оно встречается.
+        Функция AddDocument построила TF_, где каждому слову отнесено множество документов, где оно встречается.
         */
 
-        map<string, double> idf; // в результате получим слово из запроса и его посчитанный IDF (не факт, что все слова из запроса обрели IDF, ведь слова может не быть в индексе, а значит знаменателя нет).
+        map<string, double> IDF; // в результате получим слово из запроса и его посчитанный IDF (не факт, что все слова из запроса обрели IDF, ведь слова может не быть в индексе, а значит знаменателя нет).
         for (const string& word : query_words.plus_words) {
-            if (index_.count(word) != 0) { // если слово есть в индексе, значит можно быстро понять, в скольких документах оно есть -- index_.at(word).size().
-                idf[word] = log(static_cast<double>(document_count_) / index_.at(word).size());
+            if (TF_.count(word) != 0) { // если слово есть в индексе, значит можно быстро понять, в скольких документах оно есть -- TF_.at(word).size().
+                IDF[word] = log(static_cast<double>(document_order_.size()) / TF_.at(word).size());
             }
         }
 
         map<int, double> matched_documents;
 
-        for (const auto& [word, idf] : idf) { // раз мы идем здесь по словарю idf, значит мы идем по плюс-словам запроса.
+        for (const auto& [word, idf] : IDF) { // раз мы идем здесь по словарю idf, значит мы идем по плюс-словам запроса.
             if (TF_.count(word) != 0) { // если плюс-слово запроса есть в TF_, значит по TF_.at(плюс-слово запроса) мы получим все id документов, где это слово имеет вес tf, эти документы интересы.
                 for (const auto& [document_id, tf] : TF_.at(word)) { // будем идти по предпосчитанному TF_.at(плюс-слово запроса) и наращивать релевантность документам по их id по офрмуле IDF-TF.
                     matched_documents[document_id] += idf * tf; 
@@ -280,13 +274,13 @@ private:
             }
         }
 
-        /* теперь надо пройтись по минус словам и посмотреть при помощи index_,
+        /* теперь надо пройтись по минус словам и посмотреть при помощи TF_,
         какие id документов есть по этому слову, и вычеркнуть их из выдачи.
         */
 
         for (const string& word : query_words.minus_words) {
-            if (index_.count(word) != 0) {
-                for (const auto& documents_id : index_.at(word)) {
+            if (TF_.count(word) != 0) {
+                for (const auto& [documents_id, _] : TF_.at(word)) {
                     if (matched_documents.count(documents_id) != 0) {
                         matched_documents.erase(documents_id);
                     }
@@ -325,19 +319,10 @@ private:
         return 0; // если нет оценок, по условию рэйтинг такого документа равен нулю
     }
 
-    bool IsDoubleMinusSymbolsInQuery(const vector<string>& query_words) const {
+    template<typename Container>
+    bool IsAloneOrDoubleMinusSymbolsInQuery(const Container& query_words) const {
         for(auto word : query_words) {
-            if (word.length() >= 2 && word[0] == '-' && word[1] == '-') {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    bool IsAloneMinusSymbolInQuery(const vector<string>& query_words) const {
-        for (auto word : query_words) {
-            if (word == "-") {
+            if (word.empty() || word[0] == '-') {
                 return true;
             }
         }
@@ -368,30 +353,6 @@ private:
     void ThrowSpecialSymbolInText(const string& text) const {
         if (IsSpecialSymboslInText(text)) {
             throw invalid_argument("Special symbol in text"s);
-        }
-    }
-
-    void ThrowNegativeDocumentId(const int document_id) const {
-        if (IsNegativeDocumentId(document_id)) {
-            throw invalid_argument("Negative document id"s);
-        }
-    }
-
-    void ThrowRecurringDocumentId(const int document_id) const {
-        if (IsRecurringDocumentId(document_id)) {
-            throw invalid_argument("Recurring document id"s);
-        }
-    }
-
-    void ThrowDoubleMinusSymbolsInQuery(const vector<string>& query) const {
-        if (IsDoubleMinusSymbolsInQuery(query)) {
-            throw invalid_argument("Double minus in query"s);
-        }
-    }
-
-    void ThrowAloneMinusSymbolInQuery(const vector<string>& query) const {
-        if (IsAloneMinusSymbolInQuery(query)) {
-            throw invalid_argument("Alone minus in query"s);
         }
     }
 };
@@ -429,8 +390,10 @@ int main() {
         cout << e.what() << endl;
     }
 
+    vector<Document> test = search_server.FindTopDocuments("- --пушистый -minus - -- -"s);
+
     try {
-        for (const Document& document : search_server.FindTopDocuments("--пушистый"s)) {
+        for (const Document& document : search_server.FindTopDocuments("- --пушистый - -- -"s)) {
                 PrintDocument(document);
             }
     } catch (const invalid_argument& e) {
