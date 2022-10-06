@@ -231,18 +231,19 @@ private:
 
         ThrowSpecialSymbolInText(raw_query);
         
-
         for (const string& word : SplitIntoWordsNoStop(raw_query)) {
             if (word[0] == '-') {
-                query_words.minus_words.insert(word.substr(1));
+                auto prepared_word = word.substr(1);
+                
+                if (prepared_word.empty() || prepared_word[0] == '-') {
+                    throw invalid_argument("Alone or double minus in query"s);
+                }
+
+                query_words.minus_words.insert(prepared_word);
             } else if (query_words.minus_words.count(word) == 0) {
                 query_words.plus_words.insert(word);
             }
         }
-
-        if (IsAloneOrDoubleMinusSymbolsInQuery(query_words.minus_words)) {
-            throw invalid_argument("Alone or double minus in query"s);
-        };
 
         return query_words;
     }
@@ -266,7 +267,7 @@ private:
 
         map<int, double> matched_documents;
 
-        for (const auto& [word, idf] : IDF) { // раз мы идем здесь по словарю idf, значит мы идем по плюс-словам запроса.
+        for (const auto& [word, idf] : IDF) { // раз мы идем здесь по словарю IDF, значит мы идем по плюс-словам запроса.
             if (TF_.count(word) != 0) { // если плюс-слово запроса есть в TF_, значит по TF_.at(плюс-слово запроса) мы получим все id документов, где это слово имеет вес tf, эти документы интересы.
                 for (const auto& [document_id, tf] : TF_.at(word)) { // будем идти по предпосчитанному TF_.at(плюс-слово запроса) и наращивать релевантность документам по их id по офрмуле IDF-TF.
                     matched_documents[document_id] += idf * tf; 
@@ -317,17 +318,6 @@ private:
             return accumulate(ratings.begin(), ratings.end(), 0.0) / static_cast<int>(ratings.size());
         }
         return 0; // если нет оценок, по условию рэйтинг такого документа равен нулю
-    }
-
-    template<typename Container>
-    bool IsAloneOrDoubleMinusSymbolsInQuery(const Container& query_words) const {
-        for(auto word : query_words) {
-            if (word.empty() || word[0] == '-') {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     bool IsSpecialSymboslInText(const string& text) const {
@@ -390,7 +380,7 @@ int main() {
         cout << e.what() << endl;
     }
 
-    vector<Document> test = search_server.FindTopDocuments("- --пушистый -minus - -- -"s);
+    vector<Document> test = search_server.FindTopDocuments("- --пушистый -minus кото-пес - -- -"s);
 
     try {
         for (const Document& document : search_server.FindTopDocuments("- --пушистый - -- -"s)) {
