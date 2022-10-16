@@ -347,10 +347,10 @@ private:
 };
 
 template <typename Iterator>
-class IteratorRange {
+class Page {
 public:
 
-    IteratorRange(Iterator begin, Iterator end) : begin_(begin), end_(end) {}
+    Page(Iterator begin, Iterator end) : begin_(begin), end_(end) {}
 
     Iterator begin() const { return begin_; }
     Iterator end() const { return end_; }
@@ -377,7 +377,7 @@ public:
                 page_end = range_end;
             }
 
-            pages_.push_back(IteratorRange(page_start, page_end));
+            pages_.push_back(Page(page_start, page_end));
             
             page_start = page_end;
         }
@@ -388,7 +388,7 @@ public:
     auto end() const { return pages_.end(); }
 
 private:
-    vector<IteratorRange<Iterator>> pages_;
+    vector<Page<Iterator>> pages_;
 };
 
 void PrintDocument(const Document& document) {
@@ -414,7 +414,7 @@ ostream& operator<<(ostream& output, const Document& doc) {
 }
 
 template<typename Iterator>
-ostream& operator<<(ostream& output, const IteratorRange<Iterator>& page) {
+ostream& operator<<(ostream& output, const Page<Iterator>& page) {
 
     for (auto it = page.begin(); it != page.end(); ++it)
     output << *it;
