@@ -22,11 +22,10 @@ public:
 
     // конструктор на основе коллекции vector или set
     template<typename StringContainer>
-    explicit SearchServer(const StringContainer& stop_words)
-        : stop_words_(MakeSetStopWords(stop_words)) {
-            for (const std::string& word : stop_words) {
-                ThrowSpecialSymbolInText(word);
-            }
+    explicit SearchServer(const StringContainer& stop_words) : stop_words_(MakeSetStopWords(stop_words)) {
+        for (const std::string& word : stop_words) {
+            ThrowSpecialSymbolInText(word);
+        }
     }
 
     // конструктор на основе строки с любым количеством пробелов до, между и после слов

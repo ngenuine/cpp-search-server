@@ -13,5 +13,6 @@ std::set<std::string> MakeSetStopWords(const StringContainer& strings) {
             non_empty_strings.insert(str);
         }
     }
+    
     return non_empty_strings;
 }

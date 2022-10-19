@@ -32,7 +32,9 @@ void SearchServer::AddDocument(int document_id, const std::string& document, con
 
 std::vector<Document> SearchServer::FindTopDocuments(const std::string& raw_query, DocumentStatus given_status /* = DocumentStatus::ACTUAL */) const {
     return FindTopDocuments(raw_query,
-                            [given_status](int document_id, DocumentStatus status, int rating) {return status == given_status;});
+                            [given_status](int document_id, DocumentStatus status, int rating) {
+                                return status == given_status;
+                            });
 }
 
 std::tuple<std::vector<std::string>, DocumentStatus> SearchServer::MatchDocument(const std::string& raw_query, int document_id) const {
@@ -89,6 +91,7 @@ std::vector<std::string> SearchServer::SplitIntoWordsNoStop(const std::string& t
             words.push_back(word);
         }
     }
+
     return words;
 }
 
@@ -120,6 +123,7 @@ int SearchServer::ComputeAverageRating(const std::vector<int>& ratings) {
     if (ratings.size() > 0) {
         return std::accumulate(ratings.begin(), ratings.end(), 0.0) / static_cast<int>(ratings.size());
     }
+    
     return 0; // если нет оценок, по условию рэйтинг такого документа равен нулю
 }
 
