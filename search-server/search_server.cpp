@@ -1,9 +1,17 @@
 #include "search_server.h"
 
+std::set<int>::const_iterator SearchServer::begin() const {
+    return document_order_.begin();
+}
+
+std::set<int>::const_iterator SearchServer::end() const {
+    return document_order_.end();
+}
+
 SearchServer::SearchServer(const std::string& stop_words_text) : SearchServer(SplitIntoWords(stop_words_text)) {}
 
 void SearchServer::AddDocument(int document_id, const std::string& document, const DocumentStatus& status, const std::vector<int>& ratings) {
-        
+    
     ThrowSpecialSymbolInText(document);
 
     if (IsNegativeDocumentId(document_id)) {
@@ -16,7 +24,7 @@ void SearchServer::AddDocument(int document_id, const std::string& document, con
 
     // наполняем счетчик документов ( -- он пригодится для подсчета IDF.
     // одновременно и порядок добавления получаем
-    document_order_.push_back(document_id); 
+    document_order_.insert(document_id); 
 
     document_status_[document_id] = status;
 
@@ -24,9 +32,9 @@ void SearchServer::AddDocument(int document_id, const std::string& document, con
 
     documents_rating_[document_id] = ComputeAverageRating(ratings);
 
-    
     for (const std::string& word : words) {
         TF_[word][document_id] += 1.0 / words.size(); // Рассчитываем TF каждого слова в каждом документе.
+        word_frequencies_by_document_id_[document_id][word] += 1.0 / words.size();
     }
 }
 
@@ -72,12 +80,29 @@ int SearchServer::GetDocumentCount() const {
     return document_order_.size();
 }
 
-int SearchServer::GetDocumentId(int order) const {
-    if (order < 0 || order >= static_cast<int>(document_order_.size())) {
-        throw std::out_of_range("Order of document out of range");
+const std::map<std::string, double>& SearchServer::GetWordFrequencies(int document_id) const {
+    if (word_frequencies_by_document_id_.count(document_id)) {
+        return word_frequencies_by_document_id_.at(document_id);
     }
+    static const std::map<std::string, double> empty_map{};
+    return empty_map;
+}
 
-    return document_order_[order];
+void SearchServer::RemoveDocument(int document_id) {
+    if (word_frequencies_by_document_id_.count(document_id)) {
+        for (const auto& [word, freq] : word_frequencies_by_document_id_.at(document_id)) {
+            TF_.at(word).erase(document_id);
+            if (TF_.at(word).empty()) {
+                TF_.erase(word);
+            }
+        }
+
+    word_frequencies_by_document_id_.erase(document_id);
+    document_status_.erase(document_id);
+    documents_rating_.erase(document_id);
+    document_order_.erase(document_id);
+
+    }
 }
 
 bool SearchServer::IsStopWord(const std::string& word) const {
@@ -151,4 +176,8 @@ void SearchServer::ThrowSpecialSymbolInText(const std::string& text) const {
     if (IsSpecialSymboslInText(text)) {
         throw std::invalid_argument("Special symbol in text"s);
     }
+}
+
+void AddDocument(SearchServer& search_server, int document_id, const std::string& document, const DocumentStatus& status, const std::vector<int>& ratings) {
+    search_server.AddDocument(document_id, document, status, ratings);
 }

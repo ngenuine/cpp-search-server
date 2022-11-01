@@ -1,4 +1,6 @@
+#include "document.h"
 #include "test_example_functions.h"
+#include "remove_duplicates.h"
 
 void AssertImpl(bool value, const std::string& expr_str, const std::string& file, const std::string& func, unsigned line,
                 const std::string& hint) {
@@ -23,8 +25,18 @@ void TestAddingDocuments() {
         SearchServer search_server(""s);
         search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
         std::vector<Document> answer = search_server.FindTopDocuments("stiven"s);
-        ASSERT_EQUAL_HINT(answer.size(), 1, "Size of search results should be 1");
+        ASSERT_EQUAL_HINT(static_cast<int>(answer.size()), 1, "Size of search results should be 1");
         ASSERT_EQUAL(answer[0].id, id1);
+    }
+
+    {
+        SearchServer search_server("and with"s);
+
+        AddDocument(search_server, 1, "funny pet and nasty rat"s, DocumentStatus::ACTUAL, {7, 2, 7});
+        AddDocument(search_server, 2, "funny pet with curly hair"s, DocumentStatus::ACTUAL, {1, 2});
+        
+        int number_of_documents_in_the_search_server = 2;
+        ASSERT_HINT(search_server.GetDocumentCount() == number_of_documents_in_the_search_server, "Not all documents have been added"s);
     }
 }
 
@@ -36,7 +48,7 @@ void TestExcludingStopWords() {
     {
         SearchServer search_server("with and"s);
         search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
-        ASSERT_HINT(search_server.FindTopDocuments("and with"s).empty(), "Search result should be empty");
+        ASSERT_HINT(search_server.FindTopDocuments("and with"s).empty(), "Search result should be empty"s);
     }
 }
 
@@ -54,7 +66,7 @@ void TestExcludingMinusWords() {
         search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
         search_server.AddDocument(id2, content2, DocumentStatus::ACTUAL, ratings2);
         std::vector<Document> answer = search_server.FindTopDocuments("spider man -hulk"s);
-        ASSERT_EQUAL_HINT(answer.size(), 1, "Search engine doesn't exclude query witn minus-words");
+        ASSERT_EQUAL_HINT(static_cast<int>(answer.size()), 1, "Search engine doesn't exclude query witn minus-words");
         ASSERT_EQUAL(answer[0].id, id2);
     }
 }
@@ -68,7 +80,7 @@ void TestMatchingDocument() {
         SearchServer search_server(""s);
         search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
         std::tuple<std::vector<std::string>, DocumentStatus> answer1 = search_server.MatchDocument("spider man -hulk"s, id1);
-        ASSERT_EQUAL(std::get<0>(answer1).size(), 0);
+        ASSERT_EQUAL(static_cast<int>(std::get<0>(answer1).size()), 0);
         
         std::tuple<std::vector<std::string>, DocumentStatus> answer2 = search_server.MatchDocument("spider hulk"s, id1);
         const std::vector<std::string> intersection = {"hulk"s, "spider"s};
@@ -172,7 +184,7 @@ void TestPredicateAsFilter() {
         };
 
         std::vector<Document> answer = search_server.FindTopDocuments("spider man and hulk"s, predicate);
-        ASSERT_EQUAL(answer.size(), 1);
+        ASSERT_EQUAL(static_cast<int>(answer.size()), 1);
     }
 }
 
@@ -233,8 +245,68 @@ void TestIsCorrectRelevance() {
     }
 }
 
+void TestGetWordFrequencies() {
+    {
+        SearchServer search_server("and with"s);
+
+        int id = 75;
+        std::string content = "funny pet and nasty rat"s;
+        DocumentStatus status = DocumentStatus::ACTUAL;
+        std::vector<int> rating = {7, 2, 7};
+
+        search_server.AddDocument(id, content, status, rating);
+        std::map<std::string, double> word_freqs_at_document = {
+            {"funny"s, 0.25},
+            {"nasty"s, 0.25},
+            {"pet"s, 0.25},
+            {"rat"s, 0.25}
+        };
+
+        ASSERT_EQUAL(search_server.GetWordFrequencies(id), word_freqs_at_document);
+
+        int non_existent_document_id = 1;
+        std::map<std::string, double> empty_map{};
+        ASSERT_EQUAL(search_server.GetWordFrequencies(non_existent_document_id), empty_map);
+    }
+}
+
+void TestRemoveDocument() {
+    {
+        SearchServer search_server("and with"s);
+
+        int id = 75;
+        std::string content = "funny pet and nasty rat"s;
+        DocumentStatus status = DocumentStatus::ACTUAL;
+        std::vector<int> rating = {7, 2, 7};
+
+        search_server.AddDocument(id, content, status, rating);
+        search_server.RemoveDocument(75);
+
+        int number_of_document = 0;
+
+        ASSERT_EQUAL(search_server.GetDocumentCount(), number_of_document);
+    }
+
+}
+
+void TestRemoveDuplicates() {
+    {
+        SearchServer search_server("and with"s);
+        search_server.AddDocument(75, "funny pet and nasty rat"s, DocumentStatus::ACTUAL, {7, 2, 7});
+        search_server.AddDocument(57, "rat nasty pet funny"s, DocumentStatus::REMOVED, {5, 1});
+
+        RemoveDuplicates(search_server);
+
+        int number_of_document = 1;
+        ASSERT_EQUAL(search_server.GetDocumentCount(), number_of_document);
+    }
+}
+
 // Функция TestSearchServer является точкой входа для запуска тестов
 void TestSearchServer() {
+    RUN_TEST(TestGetWordFrequencies);
+    RUN_TEST(TestRemoveDocument);
+    RUN_TEST(TestRemoveDuplicates);
     RUN_TEST(TestAddingDocuments);
     RUN_TEST(TestExcludingStopWords);
     RUN_TEST(TestExcludingMinusWords);

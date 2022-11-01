@@ -16,9 +16,13 @@ const int PRECISE = 1e-06;
 
 using namespace std::literals;
 
+
 class SearchServer {
 
 public:
+
+    std::set<int>::const_iterator begin() const;
+    std::set<int>::const_iterator end() const;
 
     // конструктор на основе коллекции vector или set
     template<typename StringContainer>
@@ -62,7 +66,9 @@ public:
 
     std::tuple<std::vector<std::string>, DocumentStatus> MatchDocument(const std::string& raw_query, int document_id) const;
 
-    int GetDocumentId(int order) const;
+    const std::map<std::string, double>& GetWordFrequencies(int document_id) const;
+
+    void RemoveDocument(int document_id);
 
 private:
 
@@ -74,8 +80,9 @@ private:
     std::map<int, int> documents_rating_;
     std::map<int, DocumentStatus> document_status_;
     std::map<std::string, std::map<int, double>> TF_;
+    std::map<int, std::map<std::string, double>> word_frequencies_by_document_id_;
     const std::set<std::string> stop_words_;
-    std::vector<int> document_order_;
+    std::set<int> document_order_;
 
     bool IsStopWord(const std::string& word) const;
 
@@ -156,3 +163,5 @@ private:
 
     void ThrowSpecialSymbolInText(const std::string& text) const;
 };
+
+void AddDocument(SearchServer& search_server, int document_id, const std::string& document, const DocumentStatus& status, const std::vector<int>& ratings);

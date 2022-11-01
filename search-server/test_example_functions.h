@@ -118,6 +118,12 @@ void TestGivenStatusAsFilter();
 
 void TestIsCorrectRelevance();
 
+void TestGetWordFrequencies();
+
+void TestRemoveDocument();
+
+void TestRemoveDuplicates();
+
 // Функция TestSearchServer является точкой входа для запуска тестов
 void TestSearchServer();
 
