@@ -18,19 +18,13 @@ void RemoveDuplicates(SearchServer& search_server) {
 
     }
 
-    std::set<int> to_remove;
     for (const auto& [word_set, doc_id_set]: duplicates) {
-        if (doc_id_set.size() > 1) {
-            auto removed_document = doc_id_set.rbegin();
-            while (removed_document != --doc_id_set.rend()) {
-                to_remove.insert(*removed_document);
-                ++removed_document;
-            }
+        auto removed_document = doc_id_set.rbegin();
+        while (removed_document != --doc_id_set.rend()) {
+            std::cout << "Found duplicate document id "s << *removed_document << std::endl;
+            search_server.RemoveDocument(*removed_document);
+
+            ++removed_document;
         }
-    }
-    
-    for (const int document_id : to_remove) {
-        std::cout << "Found duplicate document id "s << document_id << std::endl;
-        search_server.RemoveDocument(document_id);
     }
 }

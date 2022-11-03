@@ -1,6 +1,7 @@
 #include "document.h"
 #include "test_example_functions.h"
 #include "remove_duplicates.h"
+#include <stdexcept>
 
 void AssertImpl(bool value, const std::string& expr_str, const std::string& file, const std::string& func, unsigned line,
                 const std::string& hint) {
@@ -294,10 +295,12 @@ void TestRemoveDuplicates() {
         SearchServer search_server("and with"s);
         search_server.AddDocument(75, "funny pet and nasty rat"s, DocumentStatus::ACTUAL, {7, 2, 7});
         search_server.AddDocument(57, "rat nasty pet funny"s, DocumentStatus::REMOVED, {5, 1});
+        search_server.AddDocument(1, "rat nasty funny"s, DocumentStatus::IRRELEVANT, {1});
+
 
         RemoveDuplicates(search_server);
 
-        int number_of_document = 1;
+        int number_of_document = 2;
         ASSERT_EQUAL(search_server.GetDocumentCount(), number_of_document);
     }
 }
