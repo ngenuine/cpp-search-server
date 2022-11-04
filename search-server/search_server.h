@@ -56,11 +56,11 @@ private:
     };
 
     struct DocumentData {
-        std::map<int, int> ratings;
-        std::map<int, DocumentStatus> statuses;
+        int rating;
+        DocumentStatus status;
     };
 
-    DocumentData document_data_;
+    std::map<int, DocumentData> document_info_;
     std::map<std::string, std::map<int, double>> TF_;
     std::map<int, std::map<std::string, double>> word_frequencies_by_document_id_;
     const std::set<std::string> stop_words_;
@@ -125,19 +125,19 @@ std::vector<Document> SearchServer::FindAllDocuments(const PlusMinusWords& query
     Функция AddDocument построила TF_, где каждому слову отнесено множество документов, где оно встречается.
     */
 
-    std::map<std::string, double> IDF; // в результате получим слово из запроса и его посчитанный IDF (не факт, что все слова из запроса обрели IDF, ведь слова может не быть в индексе, а значит знаменателя нет).
+    double idf;
+    std::map<int, double> IDF_TF; // в результате получим соответствие документ -- его релевантность, посчитанная по алгоритму IDF-TF.
+
     for (const std::string& word : query_words.plus_words) {
-        if (TF_.count(word) != 0) { // если слово есть в индексе, значит можно быстро понять, в скольких документах оно есть -- TF_.at(word).size().
-            IDF[word] = log(static_cast<double>(document_order_.size()) / TF_.at(word).size());
-        }
-    }
-
-    std::map<int, double> matched_documents;
-
-    for (const auto& [word, idf] : IDF) { // раз мы идем здесь по словарю IDF, значит мы идем по плюс-словам запроса.
-        if (TF_.count(word) != 0) { // если плюс-слово запроса есть в TF_, значит по TF_.at(плюс-слово запроса) мы получим все id документов, где это слово имеет вес tf, эти документы интересы.
+        if (TF_.count(word) != 0) { // если плюс-слово запроса есть в TF_, значит по TF_.at(плюс-слово запроса) мы получим все id документов, где это слово имеет вес tf, эти документы интересы; а по TF_.at(word).size() поймем, в скольких документах это слово есть.
+            
+            idf = log(static_cast<double>(document_order_.size()) / TF_.at(word).size());
+            
             for (const auto& [document_id, tf] : TF_.at(word)) { // будем идти по предпосчитанному TF_.at(плюс-слово запроса) и наращивать релевантность документам по их id по офрмуле IDF-TF.
-                matched_documents[document_id] += idf * tf; 
+                const DocumentData& document_data = document_info_.at(document_id);
+                if (filter(document_id, document_data.status, document_data.rating)) { // если документ соответсвует предикату, рассчитаем ему релевантность по алгоритму IDF-TF, иначе нет смысла считать, чтобы потом не удалять пусть и релевантные документы, не соответствующие предикату
+                    IDF_TF[document_id] += idf * tf; 
+                }
             }
         }
     }
@@ -149,31 +149,15 @@ std::vector<Document> SearchServer::FindAllDocuments(const PlusMinusWords& query
     for (const std::string& word : query_words.minus_words) {
         if (TF_.count(word) != 0) {
             for (const auto& [documents_id, _] : TF_.at(word)) {
-                if (matched_documents.count(documents_id) != 0) {
-                    matched_documents.erase(documents_id);
-                }
-
+                IDF_TF.erase(documents_id);
             }
         }
     }
 
-    /* и еще пройтись filter, чтобы соответствовали запросу: id, status, rating */
-
-    std::vector<int> for_erase;
-    for (const auto& [document_id, relevance] : matched_documents) {
-        if (!filter(document_id, document_data_.statuses.at(document_id), document_data_.ratings.at(document_id))) {
-            for_erase.push_back(document_id);
-        }
-    }
-
-    for (int document_id: for_erase) {
-        matched_documents.erase(document_id);
-    }
-
     std::vector<Document> result;
 
-    for (const auto& [document_id, relevance] : matched_documents) {
-        result.push_back({document_id, relevance, document_data_.ratings.at(document_id)});
+    for (const auto& [document_id, relevance] : IDF_TF) {
+        result.push_back({document_id, relevance, document_info_.at(document_id).rating});
     }
 
     return result;

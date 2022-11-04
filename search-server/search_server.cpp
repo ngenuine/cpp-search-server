@@ -27,11 +27,9 @@ void SearchServer::AddDocument(int document_id, const std::string& document, con
     // одновременно и порядок добавления получаем
     document_order_.insert(document_id); 
 
-    document_data_.statuses[document_id] = status;
+    document_info_[document_id] = {ComputeAverageRating(ratings), status};
 
     const std::vector<std::string> words = SplitIntoWordsNoStop(document);
-
-    document_data_.ratings[document_id] = ComputeAverageRating(ratings);
 
     for (const std::string& word : words) {
         TF_[word][document_id] += 1.0 / words.size(); // Рассчитываем TF каждого слова в каждом документе.
@@ -51,9 +49,10 @@ std::tuple<std::vector<std::string>, DocumentStatus> SearchServer::MatchDocument
     SearchServer::PlusMinusWords prepared_query = ParseQuery(raw_query);
 
     for (const std::string& minus_word : prepared_query.minus_words) {
-        if (TF_.count(minus_word)) {
-            if (TF_.at(minus_word).count(document_id)) {
-                return {std::vector<std::string>{}, document_data_.statuses.at(document_id)};
+        if (TF_.count(minus_word) > 0) {
+            if (TF_.at(minus_word).count(document_id) > 0) {
+                return {std::vector<std::string>{}, document_info_.at(document_id).status};
+
             }
         }
     }
@@ -73,8 +72,7 @@ std::tuple<std::vector<std::string>, DocumentStatus> SearchServer::MatchDocument
         result_intersection.push_back(word);
     }
 
-    return {result_intersection, document_data_.statuses.at(document_id)};
-
+    return {result_intersection, document_info_.at(document_id).status};
 }
 
 int SearchServer::GetDocumentCount() const {
@@ -90,18 +88,20 @@ const std::map<std::string, double>& SearchServer::GetWordFrequencies(int docume
 }
 
 void SearchServer::RemoveDocument(int document_id) {
-    if (!word_frequencies_by_document_id_.count(document_id)) { return; }
+    if (word_frequencies_by_document_id_.count(document_id) == 0) {
+        return;
+    }
 
     for (const auto& [word, freq] : word_frequencies_by_document_id_.at(document_id)) {
         TF_.at(word).erase(document_id);
+        
         if (TF_.at(word).empty()) {
             TF_.erase(word);
         }
     }
 
     word_frequencies_by_document_id_.erase(document_id);
-    document_data_.statuses.erase(document_id);
-    document_data_.ratings.erase(document_id);
+    document_info_.erase(document_id);
     document_order_.erase(document_id);
 
 }
@@ -162,7 +162,7 @@ bool SearchServer::IsNegativeDocumentId(const int document_id) const {
 }
 
 bool SearchServer::IsRecurringDocumentId(const int document_id) const {
-    return document_data_.ratings.count(document_id);
+    return document_info_.count(document_id);
 }
 
 void SearchServer::ThrowSpecialSymbolInText(const std::string& text) const {

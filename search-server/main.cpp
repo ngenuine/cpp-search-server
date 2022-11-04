@@ -12,7 +12,7 @@ using namespace std::literals;
 int main() {
 
     TestSearchServer();
-    std::cerr << "Search server testing finished"s << std::endl;
+    std::cerr << "\nSearch server testing finished\n"s << std::endl;
     
     {
         SearchServer search_server("and with"s);
@@ -101,6 +101,7 @@ int main() {
         search_server.AddDocument(3, "big cat nasty hair"s, DocumentStatus::ACTUAL, {1, 2, 8});
         search_server.AddDocument(4, "big dog cat Vladislav"s, DocumentStatus::ACTUAL, {1, 3, 2});
         search_server.AddDocument(5, "big dog hamster Borya"s, DocumentStatus::ACTUAL, {1, 1, 1});
+        
         const auto search_results = search_server.FindTopDocuments("curly dog"s);
         int page_size = 2;
         const auto pages = Paginate(search_results, page_size);
@@ -110,7 +111,6 @@ int main() {
             std::cout << "Page break"s << std::endl;
         }
     }
-
-
+    
     return 0;
 }
