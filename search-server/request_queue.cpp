@@ -5,7 +5,7 @@ RequestQueue::RequestQueue(const SearchServer& search_server) : search_s_(search
 
 // о, прикольно; параметр по умолчанию есть в объявлении -- следовательно в определении не нужен! иначе ошибка "default argument given for parameter"
 // для прозрачности можно закомментить
-std::vector<Document> RequestQueue::AddFindRequest(const std::string& raw_query, DocumentStatus given_status /* = DocumentStatus::ACTUAL */) {
+std::vector<Document> RequestQueue::AddFindRequest(std::string_view raw_query, DocumentStatus given_status /* = DocumentStatus::ACTUAL */) {
     return AddFindRequest(raw_query, [given_status](int document_id, DocumentStatus status, int rating) {return status == given_status;});
 }
 

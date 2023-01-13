@@ -13,9 +13,9 @@ Document::Document(const int given_id, const double given_relevance, const int g
 std::ostream& operator<<(std::ostream& output, const Document& doc) {
 
     output
-    << "{ document_id = "s << doc.id
-    << ", relevance = "s << doc.relevance
-    << ", rating = " << doc.rating << " }";
+    << "{ document_id = "sv << doc.id
+    << ", relevance = "sv << doc.relevance
+    << ", rating = "sv << doc.rating << " }"sv;
 
     return output;
 }

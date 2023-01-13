@@ -62,36 +62,36 @@ std::ostream& operator<<(std::ostream& output, const std::set<T>& s) {
 }
 
 template <typename T, typename U>
-void AssertEqualImpl(const T& t, const U& u, const std::string& t_str, const std::string& u_str, const std::string& file,
-                     const std::string& func, unsigned line, const std::string& hint) {
+void AssertEqualImpl(const T& t, const U& u, std::string_view t_str, std::string_view u_str, std::string_view file,
+                     std::string_view func, unsigned line, std::string_view hint) {
     if (t != u) {
         std::cerr << std::boolalpha;
-        std::cerr << file << "("s << line << "): "s << func << ": "s;
-        std::cerr << "ASSERT_EQUAL("s << t_str << ", "s << u_str << ") failed: "s;
-        std::cerr << t << " != "s << u << "."s;
+        std::cerr << file << "("sv << line << "): "sv << func << ": "sv;
+        std::cerr << "ASSERT_EQUAL("sv << t_str << ", "sv << u_str << ") failed: "sv;
+        std::cerr << t << " != "sv << u << "."sv;
         if (!hint.empty()) {
-            std::cerr << " Hint: "s << hint;
+            std::cerr << " Hint: "sv << hint;
         }
         std::cerr << std::endl;
         abort();
     }
 }
 
-#define ASSERT_EQUAL(a, b) AssertEqualImpl((a), (b), #a, #b, __FILE__, __FUNCTION__, __LINE__, ""s)
+#define ASSERT_EQUAL(a, b) AssertEqualImpl((a), (b), #a, #b, __FILE__, __FUNCTION__, __LINE__, ""sv)
 
 #define ASSERT_EQUAL_HINT(a, b, hint) AssertEqualImpl((a), (b), #a, #b, __FILE__, __FUNCTION__, __LINE__, (hint))
 
-void AssertImpl(bool value, const std::string& expr_str, const std::string& file, const std::string& func, unsigned line,
-                const std::string& hint);
+void AssertImpl(bool value, std::string_view expr_str, std::string_view file, std::string_view func, unsigned line,
+                std::string_view hint);
 
-#define ASSERT(expr) AssertImpl(!!(expr), #expr, __FILE__, __FUNCTION__, __LINE__, ""s)
+#define ASSERT(expr) AssertImpl(!!(expr), #expr, __FILE__, __FUNCTION__, __LINE__, ""sv)
 
 #define ASSERT_HINT(expr, hint) AssertImpl(!!(expr), #expr, __FILE__, __FUNCTION__, __LINE__, (hint))
 
 template <typename ReturnedType>
-void RunTestImpl(ReturnedType func, const std::string& func_name) {
+void RunTestImpl(ReturnedType func, std::string_view func_name) {
     func();
-    std::cerr << func_name << " OK"s << std::endl;
+    std::cerr << func_name << " OK"sv << std::endl;
 }
 
 #define RUN_TEST(func) RunTestImpl((func), #func)

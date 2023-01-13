@@ -1,18 +1,22 @@
 #pragma once
 #include <vector>
 #include <string>
+#include <string_view>
 #include <set>
+#include <algorithm>
 
 std::vector<std::string> SplitIntoWords(const std::string& text);
 
+std::vector<std::string_view> SplitIntoWordsView(std::string_view str);
+
 template <typename StringContainer>
-std::set<std::string> MakeSetStopWords(const StringContainer& strings) {
-    std::set<std::string> non_empty_strings;
-    for (const std::string& str : strings) {
-        if (!str.empty()) {
-            non_empty_strings.insert(str);
+std::set<std::string_view> MakeSetStopWords(const StringContainer& words) {
+    std::set<std::string_view> stop_words;
+    for (std::string_view word : words) {
+        if (!word.empty()) {
+            stop_words.insert(word);
         }
     }
     
-    return non_empty_strings;
+    return stop_words;
 }

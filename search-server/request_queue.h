@@ -11,7 +11,7 @@ public:
 
     // сделаем "обёртки" для всех методов поиска, чтобы сохранять результаты для нашей статистики
     template <typename DocumentPredicate>
-    std::vector<Document> AddFindRequest(const std::string& raw_query, DocumentPredicate document_predicate) {
+    std::vector<Document> AddFindRequest(std::string_view raw_query, DocumentPredicate document_predicate) {
         
         QueryResult search_result = {search_s_.FindTopDocuments(raw_query, document_predicate)};
         QueryRevision(requests_, search_result);
@@ -19,7 +19,7 @@ public:
         return search_result.content;
     }
 
-    std::vector<Document> AddFindRequest(const std::string& raw_query, DocumentStatus given_status = DocumentStatus::ACTUAL);
+    std::vector<Document> AddFindRequest(std::string_view raw_query, DocumentStatus given_status = DocumentStatus::ACTUAL);
 
     int GetNoResultRequests() const;
 
