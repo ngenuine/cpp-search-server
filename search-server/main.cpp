@@ -3,6 +3,7 @@
 #include <random>
 #include <string>
 #include <vector>
+#include <thread>
 
 #include "search_server.h"
 #include "log_duration.h"

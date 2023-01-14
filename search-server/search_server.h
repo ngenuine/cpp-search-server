@@ -10,19 +10,16 @@
 #include <cmath>
 #include <algorithm>
 #include <numeric>
-#include <future>
 #include <execution>
-#include <thread>
-#include <atomic>
 #include "document.h"
 #include "string_processing.h"
-#include "paginator.h"
 #include "concurrent_map.h"
 
 const int MAX_RESULT_DOCUMENT_COUNT = 5;
 const int PRECISE = 1e-06;
 
 using namespace std::literals;
+using Matching = std::tuple<std::vector<std::string_view>, DocumentStatus>;
 
 class SearchServer {
 
@@ -60,11 +57,11 @@ public:
 
     int GetDocumentCount() const;
 
-    std::tuple<std::vector<std::string_view>, DocumentStatus> MatchDocument(std::string_view raw_query, int document_id) const;
+    Matching MatchDocument(std::string_view raw_query, int document_id) const;
 
-    std::tuple<std::vector<std::string_view>, DocumentStatus> MatchDocument(std::execution::sequenced_policy, std::string_view raw_query, int document_id) const;
+    Matching MatchDocument(std::execution::sequenced_policy, std::string_view raw_query, int document_id) const;
 
-    std::tuple<std::vector<std::string_view>, DocumentStatus> MatchDocument(std::execution::parallel_policy, std::string_view raw_query, int document_id) const;
+    Matching MatchDocument(std::execution::parallel_policy, std::string_view raw_query, int document_id) const;
 
     const std::map<std::string_view, double>& GetWordFrequencies(int document_id) const;
 
@@ -103,11 +100,9 @@ private:
 
     std::vector<std::string_view> SplitIntoWordsNoStopView(std::string_view text) const;
 
-    // однопоточная версия ParseQuery
-    PlusMinusWords ParseQuery(std::string_view raw_query) const;
-
-    // распараллеленная версия ParseQuery
-    PlusMinusWords ParseQuery(std::execution::parallel_policy, std::string_view raw_query) const;
+    // по умолчанию ParseQuery запустится как однопоточная;
+    // распараллеленная версия ParseQuery требует указания второго параметра true
+    PlusMinusWords ParseQuery(std::string_view raw_query, bool is_parallel_need = false) const;
 
     template <typename Predicate>
     std::vector<Document> FindAllDocuments(const PlusMinusWords& query_words, Predicate filter) const;
@@ -121,7 +116,7 @@ private:
 
     bool IsNegativeDocumentId(const int document_id) const;
 
-    bool IsNonexistentDocumentId(const int document_id) const;
+    bool IsNonExistentDocumentId(const int document_id) const;
 
     bool IsRecurringDocumentId(const int document_id) const;
 
@@ -168,7 +163,7 @@ std::vector<Document> SearchServer::FindTopDocuments(ExecutionPolicy policy, std
     }
 
     // тут два вектора с возможно повторяющимися + и - словами
-    SearchServer::PlusMinusWords prepared_query = ParseQuery(std::execution::par, raw_query);
+    SearchServer::PlusMinusWords prepared_query = ParseQuery(raw_query, true);
 
     // очищаем от повтором, потому что релевандность высчитывается на уникальных плюс-словах запроса
     // почему очищаю тут -- да потому что при вызове этой очистки в параллельной ипостаси ParseQuery я получаю непрохождение по времени

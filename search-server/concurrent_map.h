@@ -13,8 +13,7 @@ public:
     static_assert(std::is_integral_v<Key>, "ConcurrentMap supports only integer keys"s);
 
     explicit ConcurrentMap(size_t bucket_count) : buckets_(bucket_count),
-                                                  guards_(bucket_count),
-                                                  parts_(bucket_count)
+                                                  cm_(bucket_count)
     {
     }
 
@@ -25,14 +24,14 @@ public:
 
     Access operator[](const Key& key) {
         // сначала! блокирую корзину, потом лезу в неё
-        return {std::lock_guard(guards_[key % buckets_]), parts_[key % buckets_][key]};
+        return {std::lock_guard(cm_[key % buckets_].guard), cm_[key % buckets_].Map[key]};
     }
 
     std::map<Key, Value> BuildOrdinaryMap() {
         std::map<Key, Value> result;
-        for (size_t i = 0; i < parts_.size(); ++i) {
-            std::lock_guard<std::mutex> guard(guards_[i]); // заблокировал корзину, в которой "лежит" словать
-            for (auto& [k, v] : parts_[i]) { // забираю из корзины все, находясь под защитой guard
+        for (auto& cmap : cm_) {
+            std::lock_guard<std::mutex> guard(cmap.guard); // заблокировал корзину, в которой "лежит" словать
+            for (auto& [k, v] : cmap.Map) { // забираю из корзины все, находясь под защитой guard
                 result[k] = v;
             }
         }
@@ -41,11 +40,16 @@ public:
     }
 
     void erase(Key key) {
-        parts_[key % buckets_].erase(key);
+        cm_[key % buckets_].Map.erase(key);
     }
 
 private:
+
+    struct CMap {
+        std::mutex guard;
+        std::map<Key, Value> Map;
+    };
+
     size_t buckets_;
-    std::vector<std::mutex> guards_;
-    std::vector<std::map<Key, Value>> parts_;
+    std::vector<CMap> cm_;
 };

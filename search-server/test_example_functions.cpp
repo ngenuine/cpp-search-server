@@ -83,10 +83,10 @@ void TestMatchingDocument() {
     {
         SearchServer search_server(""sv);
         search_server.AddDocument(id1, content1, DocumentStatus::ACTUAL, ratings1);
-        std::tuple<std::vector<std::string_view>, DocumentStatus> answer1 = search_server.MatchDocument("spider man -hulk"sv, id1);
+        Matching answer1 = search_server.MatchDocument("spider man -hulk"sv, id1);
         ASSERT_EQUAL(static_cast<int>(std::get<0>(answer1).size()), 0);
         
-        std::tuple<std::vector<std::string_view>, DocumentStatus> answer2 = search_server.MatchDocument("spider hulk"sv, id1);
+        Matching answer2 = search_server.MatchDocument("spider hulk"sv, id1);
         const std::vector<std::string_view> intersection = {"hulk"sv, "spider"sv};
         ASSERT_EQUAL(std::get<0>(answer2), intersection);
     }

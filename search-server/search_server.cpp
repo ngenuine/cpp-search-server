@@ -57,7 +57,7 @@ std::vector<Document> SearchServer::FindTopDocuments(std::string_view raw_query,
                             });
 }
 
-std::tuple<std::vector<std::string_view>, DocumentStatus> SearchServer::MatchDocument(std::string_view raw_query, int document_id) const {
+Matching SearchServer::MatchDocument(std::string_view raw_query, int document_id) const {
 
     
     ThrowSpecialSymbolInText(raw_query);
@@ -66,11 +66,11 @@ std::tuple<std::vector<std::string_view>, DocumentStatus> SearchServer::MatchDoc
         throw std::invalid_argument("Negative document id"s);
     }
 
-    if (IsNonexistentDocumentId(document_id)) {
+    if (IsNonExistentDocumentId(document_id)) {
         throw std::invalid_argument("Nonexistent document id"s);
     }
 
-    SearchServer::PlusMinusWords prepared_query = ParseQuery(raw_query);
+    SearchServer::PlusMinusWords prepared_query = ParseQuery(raw_query /* is_parallel_need = false */);
 
     for (std::string_view minus_word : prepared_query.minus_words) {
         if (TF_by_term_.count(minus_word) > 0) {
@@ -98,22 +98,25 @@ std::tuple<std::vector<std::string_view>, DocumentStatus> SearchServer::MatchDoc
     return {result_intersection, document_info_.at(document_id).status};
 }
 
-std::tuple<std::vector<std::string_view>, DocumentStatus> SearchServer::MatchDocument(std::execution::sequenced_policy, std::string_view raw_query, int document_id) const {
+Matching SearchServer::MatchDocument(std::execution::sequenced_policy, std::string_view raw_query, int document_id) const {
     return MatchDocument(raw_query, document_id);
 }
 
-std::tuple<std::vector<std::string_view>, DocumentStatus> SearchServer::MatchDocument(std::execution::parallel_policy, std::string_view raw_query, int document_id) const {
+Matching SearchServer::MatchDocument(std::execution::parallel_policy, std::string_view raw_query, int document_id) const {
 
     if (IsNegativeDocumentId(document_id)) {
         throw std::invalid_argument("Negative document id"s);
     }
 
-    if (IsNonexistentDocumentId(document_id)) {
+    if (IsNonExistentDocumentId(document_id)) {
         throw std::invalid_argument("Nonexistent document id"s);
     }
 
     // тут два вектора с возможно повторяющимися + и - словами
-    SearchServer::PlusMinusWords prepared_query = ParseQuery(std::execution::par, raw_query);
+    // true, потому что это параллельная версия MatchDocument; а параллельной MatchDocument
+    // параллельная ParseQuery, которая запускается вторым параметром, установленным в true
+
+    SearchServer::PlusMinusWords prepared_query = ParseQuery(raw_query, true);
 
     auto find_word = [this, document_id](std::string_view word) {
                         return this->GetWordFrequencies(document_id).count(word);
@@ -222,19 +225,16 @@ std::vector<std::string_view> SearchServer::SplitIntoWordsNoStopView(std::string
     return words;
 }
 
-SearchServer::PlusMinusWords SearchServer::ParseQuery(std::string_view raw_query) const {
+SearchServer::PlusMinusWords SearchServer::ParseQuery(std::string_view raw_query, bool is_parallel_need) const {
 
     SearchServer::PlusMinusWords query_words;
 
     ThrowSpecialSymbolInText(raw_query);
 
     // это нужно, чтобы и плюс-, и минус-слова в своих векторах были уже отсортированы, потому что далее их ждет unique-erase
-    std::vector<std::string_view> sorted_query_words = SplitIntoWordsNoStopView(raw_query);
+    std::vector<std::string_view> splited_query = SplitIntoWordsNoStopView(raw_query);
 
-    std::sort(std::execution::par,
-              sorted_query_words.begin(), sorted_query_words.end());
-
-    for (std::string_view word : sorted_query_words) {
+    for (std::string_view word : splited_query) {
         if (word[0] == '-') {
             auto minus_word = word.substr(1);
             
@@ -249,44 +249,24 @@ SearchServer::PlusMinusWords SearchServer::ParseQuery(std::string_view raw_query
         }
     }
 
+    if (is_parallel_need) {
+        return query_words;
+    }
+
     std::vector<std::string_view>::iterator last;
 
-    // чистим непараллельную версию ParseQuery, ее минус-слова, от дубликатов
-    last = std::unique(query_words.minus_words.begin(), query_words.minus_words.end());
-    query_words.minus_words.erase(last, query_words.minus_words.end());
-
+    std::sort(std::execution::par,
+              query_words.plus_words.begin(), query_words.plus_words.end());
     // чистим непараллельную версию ParseQuery, ее плюс-слова, от дубликатов
     last = std::unique(query_words.plus_words.begin(), query_words.plus_words.end());
     query_words.plus_words.erase(last, query_words.plus_words.end());
 
-    return query_words;
-}
+    std::sort(std::execution::par,
+              query_words.minus_words.begin(), query_words.minus_words.end());
+    // чистим непараллельную версию ParseQuery, ее минус-слова, от дубликатов
+    last = std::unique(query_words.minus_words.begin(), query_words.minus_words.end());
+    query_words.minus_words.erase(last, query_words.minus_words.end());
 
-SearchServer::PlusMinusWords SearchServer::ParseQuery(std::execution::parallel_policy, std::string_view raw_query) const {
-
-    SearchServer::PlusMinusWords query_words;
-
-    // тут сортировок и чисток дублей не надо, как в непараллельной версии, потому что непараллельной версией
-    // пользуются FindTopDocuments и FindAllDocuments, которые считают релевантность; если в запросе
-    // будут дубли, то релевантность будет неправильно посчитата, дублей в запросе быть не должно
-
-    ThrowSpecialSymbolInText(raw_query);
-
-    for (std::string_view word : SplitIntoWordsNoStopView(raw_query)) {
-        if (word[0] == '-') {
-            auto minus_word = word.substr(1);
-            
-            if (minus_word.empty() || minus_word[0] == '-') {
-                throw std::invalid_argument("Alone or double minus in query"s);
-            }
-
-            query_words.minus_words.emplace_back(minus_word);
-
-        } else {
-            query_words.plus_words.emplace_back(word);
-        }
-    }
-    
     return query_words;
 }
 
@@ -317,7 +297,7 @@ void SearchServer::ThrowSpecialSymbolInText(std::string_view text) const {
     }
 }
 
-bool SearchServer::IsNonexistentDocumentId(const int document_id) const {
+bool SearchServer::IsNonExistentDocumentId(const int document_id) const {
     return !document_order_.count(document_id);
 }
 
